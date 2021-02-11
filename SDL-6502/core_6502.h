@@ -9,7 +9,7 @@ struct opcodes
 	opFkt     fkt;
 	uint32_t  len;
 	uint32_t  cyles;
-	char* debug;
+	char debug[8];
 };
 
 union word
@@ -29,7 +29,8 @@ struct reg_flags
 	uint8_t zero;
 	uint8_t interrupt;
 	uint8_t decimal;
-	uint8_t no_cpu_effect;
+	uint8_t break_flag;
+	uint8_t always_one;
 	uint8_t overflow;
 	uint8_t negative;
 };
@@ -42,6 +43,7 @@ struct mos6502_reg
 	uint8_t              sp;
 	union  word	         pc;
 	struct reg_flags  flags;
+	uint32_t		 clocks;
 };
 
 struct mos6502

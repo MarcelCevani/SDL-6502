@@ -1,33 +1,59 @@
+#define WIN32_LEAN_AND_MEAN
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+
 #include "SDL.h"
 #include "core_6502.h"
 
 
+// Need to link with Ws2_32.lib
+#pragma comment (lib, "Ws2_32.lib")
+// #pragma comment (lib, "Mswsock.lib")
+
 #define WINDOW_WIDTH 640 
+#define DEFAULT_BUFLEN 512
+#define DEFAULT_PORT "1234"
 
 SDL_Color colorTable[16];
+BOOL readKeyboard(struct system* system, SDL_Event& event);
+void write_emu_u8(SOCKET s, uint16_t adr, uint8_t value);
+
+SOCKET s;
+
+#define LOW_BYTE(x)     ((unsigned char)((x)&0xFF))
+#define HIGH_BYTE(x)    ((unsigned char)(((x)>>8)&0xFF))
 
 int main(int argc, char* argv[])
 {
     SDL_Event event;
     SDL_Renderer* render;
     SDL_Window* window;
+	WSADATA wsaData;
+	int iResult;
+
+	WSADATA wsa;
+	SOCKET new_socket;
+	struct sockaddr_in server, client;
+	int c;
+	char* message;
+
+	int iSendResult;
+	char recvbuf[DEFAULT_BUFLEN];
+	int recvbuflen = DEFAULT_BUFLEN;
     int i;
 
     SDL_Init(SDL_INIT_VIDEO);
 
     /* Create a Window */
-    window = SDL_CreateWindow("Hello World!", 100, 100, 320, 320, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("6502 Emulator", 100, 100, 320, 320, SDL_WINDOW_SHOWN);
     /* Create a Render */
     render = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-   
-    SDL_SetRenderDrawColor(render, 0, 0, 0, 0);
-    SDL_RenderClear(render);
-    
-	SDL_SetRenderDrawColor(render, 255, 0, 0, 255);
-  
-	for (i = 0; i < WINDOW_WIDTH; ++i)
-        SDL_RenderDrawPoint(render, i, i);
-    SDL_RenderPresent(render);
     
 	struct system system_6502;
 
@@ -96,41 +122,157 @@ int main(int argc, char* argv[])
 	colorTable[15].b = 0xbb;
 
 	init_6502_sytem(&system_6502);
+	
+#if 0
+	printf("\nInitialising Winsock...");
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+	{
+		printf("Failed. Error Code : %d", WSAGetLastError());
+		return 1;
+	}
+
+	printf("Initialised.\n");
+
+	//Create a socket
+	if ((s = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
+	{
+		printf("Could not create socket : %d", WSAGetLastError());
+	}
+
+	printf("Socket created.\n");
+
+	server.sin_addr.s_addr = inet_addr("127.0.0.1");
+	server.sin_family = AF_INET;
+	server.sin_port = htons(1234);
+
+	//Connect to remote server
+	if (connect(s, (struct sockaddr*)&server, sizeof(server)) < 0)
+	{
+		puts("connect error");
+		return 1;
+	}
+#endif
+	puts("Connected");
+
+	uint8_t borderColor = 0x00;
+
+	uint8_t scanline = 0;
+
+	system_6502.cpu.reg.clocks = 0;
+
+	BOOL bHitBreakPoint = FALSE;
 
 	while(1)
 	{
-		long ticks = 800;
+	
+#if 0
+		if(bHitBreakPoint == TRUE)
+		{
+			if (readKeyboard(&system_6502, event) == TRUE)
+			{
+				tick_6502_system(&system_6502);
 
-		while (ticks)
+				char* pDebug = &system_6502.cpu.opcode[system_6502.bus.mem[system_6502.cpu.reg.pc.value]].debug[0];
+
+				printf("PC:%04x OP:%02x MEMONIC:%s | AR:%02x XR:%02x YR:%02x SP:%02x \n", system_6502.cpu.reg.pc.value,
+					system_6502.bus.mem[system_6502.cpu.reg.pc.value],
+					pDebug,
+					system_6502.cpu.reg.a,
+					system_6502.cpu.reg.x,
+					system_6502.cpu.reg.y,
+					system_6502.cpu.reg.sp);
+
+				//printf("PC: %d OP:%s\n", system_6502.cpu.reg.pc.value, system_6502.cpu.opcode[system_6502.cpu.reg.pc.value].debug);
+			}
+		}
+		else
 		{
 			tick_6502_system(&system_6502);
-			ticks--;
+
+			if (system_6502.cpu.reg.pc.value == 0xB06A)
+			{
+				bHitBreakPoint = TRUE;
+				char* pDebug = &system_6502.cpu.opcode[system_6502.bus.mem[system_6502.cpu.reg.pc.value]].debug[0];
+
+				printf("PC:%04x OP:%02x MEMONIC:%s | AR:%02x XR:%02x YR:%02x SP:%02x \n", system_6502.cpu.reg.pc.value,
+					system_6502.bus.mem[system_6502.cpu.reg.pc.value],
+					pDebug,
+					system_6502.cpu.reg.a,
+					system_6502.cpu.reg.x,
+					system_6502.cpu.reg.y,
+					system_6502.cpu.reg.sp);
+			}
+
 		}
 
+		scanline = system_6502.cpu.reg.clocks / 63;
+		system_6502.bus.mem[0xD011] = HIGH_BYTE(scanline) & 0x80;
+		system_6502.bus.mem[0xD012] = LOW_BYTE(scanline);
+#endif
+
+
+#if 1
+		system_6502.cpu.reg.clocks = 0;
+
+		while(system_6502.cpu.reg.clocks < 19656)
+		{
+			tick_6502_system(&system_6502);
+			
+			printf("PC:%04x\n", system_6502.cpu.reg.pc.value);
+
+			//scanline = system_6502.cpu.reg.clocks / 63;
+			//system_6502.bus.mem[0xD011] = HIGH_BYTE(scanline) & 0x80;
+			//system_6502.bus.mem[0xD012] = LOW_BYTE(scanline);
+		}
+#endif
+		//Rendering
+		SDL_RenderClear(render);
+		SDL_RenderPresent(render);
+#if 0
 		SDL_SetRenderDrawColor(render, 0, 0, 0, 0);
 		SDL_RenderClear(render);
 
-
-#if 0
-		SDL_SetRenderDrawColor(render, 255, 0, 0, 255);
-
-		for (i = 0; i < WINDOW_WIDTH; ++i)
-			SDL_RenderDrawPoint(render, i, i);
-#endif	
 		int x, y;
 
-		for (y = 0; y < 64; y++)
-		for (x = 0; x < 64; x++)
-		{
-			int color = this->colorTable[this->system_6502.bus.mem[((y / 2) * 32 + (x / 2)) + 0x200] & 0x0F];
-			dc.SetPixel(x, y, color);
-		}
 
+		for (y = 0; y < 320; y++)
+			for (x = 0; x < 320; x++)
+			{
+				SDL_Color color = colorTable[system_6502.bus.mem[((y / 10) * 32 + (x / 10)) + 0x200] & 0x0F];
+				SDL_SetRenderDrawColor(render, color.r, color.g, color.b, 255);
+				SDL_RenderDrawPoint(render, x, y);
+			}
+
+		SDL_RenderPresent(render);
+#endif
+
+
+#if 0
+		SDL_SetRenderDrawColor(render, 0, 0, 0, 0);
+		SDL_RenderClear(render);
+
+		int x, y;
+
+		for (y = 0; y < 320; y++)
+		for (x = 0; x < 320; x++)
+		{
+			SDL_Color color = colorTable[system_6502.bus.mem[((y / 10) * 32 + (x / 10)) + 0x200] & 0x0F];
+			SDL_SetRenderDrawColor(render, color.r, color.g, color.b, 255);
+			SDL_RenderDrawPoint(render, x, y);
+		}
 		
 		SDL_RenderPresent(render);
+#endif
+		
+		//write_emu_u8(&s, 0xD020, borderColor);
+		//write_emu_u8(&s, 0xD021, borderColor);
 
-        if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
-            break;
+
+#if 0
+		unsigned char buf = 'A';
+
+		send(s, (const char*) &buf, 1, 0);
+#endif
     }
 
 	SDL_DestroyRenderer(render);
@@ -189,4 +331,40 @@ int main(int argc, char* argv[])
 
 #endif
     return 0;
+}
+
+BOOL readKeyboard(struct system *system, SDL_Event &event)
+{
+	while(SDL_PollEvent(&event))
+	{
+		/* We are only worried about SDL_KEYDOWN and SDL_KEYUP events */
+		switch (event.type)
+		{
+			case SDL_KEYUP:
+			if (event.key.keysym.scancode == SDL_SCANCODE_F10)
+				return TRUE;
+			break;
+#if 0
+			case SDL_KEYDOWN:
+			//system->bus.mem[0xff] = event.key.keysym.sym;
+			
+				printf("KEY\n");
+				if (event.key.keysym.sym == SDL_SCANCODE_F10)
+					return TRUE;
+				break;
+
+			case SDL_KEYUP:
+			//system->bus.mem[0xff] = 0x00;
+			if (event.key.keysym.scancode == SDL_SCANCODE_F10)
+				return TRUE;
+#endif
+			break;
+		}
+	}
+}
+
+void write_emu_u8(SOCKET s, uint16_t adr, uint8_t value)
+{
+	send(s, (const char*)&adr, 2, 0);
+	send(s, (const char*)&value, 1, 0);
 }
