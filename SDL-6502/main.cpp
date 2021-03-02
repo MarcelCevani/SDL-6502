@@ -23,9 +23,9 @@
 SDL_Color colorTable[16];
 BOOL readKeyboard(struct system* system, SDL_Event& event);
 void write_emu_u8(SOCKET s, uint16_t adr, uint8_t value);
-
+void usleep(__int64 usec);
+SOCKET server_socket;
 SOCKET s;
-
 #define LOW_BYTE(x)     ((unsigned char)((x)&0xFF))
 #define HIGH_BYTE(x)    ((unsigned char)(((x)>>8)&0xFF))
 
@@ -123,7 +123,7 @@ int main(int argc, char* argv[])
 
 	init_6502_sytem(&system_6502);
 	
-#if 0
+
 	printf("\nInitialising Winsock...");
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
 	{
@@ -134,33 +134,51 @@ int main(int argc, char* argv[])
 	printf("Initialised.\n");
 
 	//Create a socket
-	if ((s = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
+	if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
 	{
 		printf("Could not create socket : %d", WSAGetLastError());
 	}
 
 	printf("Socket created.\n");
-
-	server.sin_addr.s_addr = inet_addr("127.0.0.1");
+	
+	//Prepare the sockaddr_in structure
 	server.sin_family = AF_INET;
+	server.sin_addr.s_addr = INADDR_ANY;
 	server.sin_port = htons(1234);
 
-	//Connect to remote server
-	if (connect(s, (struct sockaddr*)&server, sizeof(server)) < 0)
+	//Bind
+	if (bind(server_socket, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR)
 	{
-		puts("connect error");
-		return 1;
+		printf("Bind failed with error code : %d", WSAGetLastError());
 	}
-#endif
-	puts("Connected");
+
+	//Listen
+	listen(server_socket, 3);
+
+
+	c = sizeof(struct sockaddr_in);
+	s = accept(server_socket, (struct sockaddr*)&client, &c);
+	
+	if (s == INVALID_SOCKET)
+	{
+		printf("accept failed with error code : %d", WSAGetLastError());
+	}
+
+
+	int nodelay = 1;
+	setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char*)&nodelay, sizeof(int));
+
+	puts("Connection accepted");
 
 	uint8_t borderColor = 0x00;
 
-	uint8_t scanline = 0;
+	uint16_t scanline = 0;
 
 	system_6502.cpu.reg.clocks = 0;
 
 	BOOL bHitBreakPoint = FALSE;
+
+	int count = 0;
 
 	while(1)
 	{
@@ -216,18 +234,40 @@ int main(int argc, char* argv[])
 
 		while(system_6502.cpu.reg.clocks < 19656)
 		{
+			scanline = system_6502.cpu.reg.clocks / 63;
+			system_6502.bus.mem[0xD011] = HIGH_BYTE(scanline) & 0x80;
+			system_6502.bus.mem[0xD012] = LOW_BYTE(scanline);
+
+			
 			tick_6502_system(&system_6502);
 			
-			printf("PC:%04x\n", system_6502.cpu.reg.pc.value);
+#if 0
+			if (system_6502.cpu.reg.pc.value == 0x0209)
+			{
+				int alarm = 0;
+			}
+#endif
 
-			//scanline = system_6502.cpu.reg.clocks / 63;
-			//system_6502.bus.mem[0xD011] = HIGH_BYTE(scanline) & 0x80;
-			//system_6502.bus.mem[0xD012] = LOW_BYTE(scanline);
+#if 0
+			if (count >= 40000)
+			{
+				count = 0;
+				printf("PC:%04x\n", system_6502.cpu.reg.pc.value);
+			}
+#endif
+#if 0
+			scanline = system_6502.cpu.reg.clocks / 63;
+			system_6502.bus.mem[0xD011] = HIGH_BYTE(scanline) & 0x80;
+			system_6502.bus.mem[0xD012] = LOW_BYTE(scanline);
+#endif
 		}
 #endif
 		//Rendering
-		SDL_RenderClear(render);
-		SDL_RenderPresent(render);
+		//Sleep(20);
+		Sleep(10);
+
+		//SDL_RenderClear(render);
+		//SDL_RenderPresent(render);
 #if 0
 		SDL_SetRenderDrawColor(render, 0, 0, 0, 0);
 		SDL_RenderClear(render);

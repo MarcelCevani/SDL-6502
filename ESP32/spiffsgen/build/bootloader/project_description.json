@@ -1,0 +1,20 @@
+{
+    "project_name":       "bootloader",
+    "project_path":       "D:/Programmierung/esp32/esp-idf/components/bootloader/subproject",
+    "build_dir":          "D:/Programmierung/esp32/esp-idf/examples/storage/spiffsgen/build/bootloader",
+    "config_file":        "D:/Programmierung/esp32/esp-idf/examples/storage/spiffsgen/sdkconfig",
+    "config_defaults":    "",
+    "app_elf":            "bootloader.elf",
+    "app_bin":            "bootloader.bin",
+    "git_revision":       "v4.2-dirty",
+    "target":             "esp32",
+    "phy_data_partition": "",
+    "monitor_baud" :      "9600",
+    "monitor_toolprefix": "xtensa-esp32-elf-",
+    "config_environment" : {
+        "COMPONENT_KCONFIGS" : "D:/Programmierung/esp32/esp-idf/components/efuse/Kconfig;D:/Programmierung/esp32/esp-idf/components/esp32/Kconfig;D:/Programmierung/esp32/esp-idf/components/esp_common/Kconfig;D:/Programmierung/esp32/esp-idf/components/log/Kconfig;D:/Programmierung/esp32/esp-idf/components/spi_flash/Kconfig",
+        "COMPONENT_KCONFIGS_PROJBUILD" : "D:/Programmierung/esp32/esp-idf/components/bootloader/Kconfig.projbuild;D:/Programmierung/esp32/esp-idf/components/esptool_py/Kconfig.projbuild;D:/Programmierung/esp32/esp-idf/components/partition_table/Kconfig.projbuild"
+    },
+    "build_components" : [ "bootloader", "bootloader_support", "efuse", "esp32", "esp_common", "esp_rom", "esptool_py", "log", "main", "micro-ecc", "partition_table", "soc", "spi_flash", "xtensa", "" ],
+    "build_component_paths" : [ "D:/Programmierung/esp32/esp-idf/components/bootloader", "D:/Programmierung/esp32/esp-idf/components/bootloader_support", "D:/Programmierung/esp32/esp-idf/components/efuse", "D:/Programmierung/esp32/esp-idf/components/esp32", "D:/Programmierung/esp32/esp-idf/components/esp_common", "D:/Programmierung/esp32/esp-idf/components/esp_rom", "D:/Programmierung/esp32/esp-idf/components/esptool_py", "D:/Programmierung/esp32/esp-idf/components/log", "D:/Programmierung/esp32/esp-idf/components/bootloader/subproject/main", "D:/Programmierung/esp32/esp-idf/components/bootloader/subproject/components/micro-ecc", "D:/Programmierung/esp32/esp-idf/components/partition_table", "D:/Programmierung/esp32/esp-idf/components/soc", "D:/Programmierung/esp32/esp-idf/components/spi_flash", "D:/Programmierung/esp32/esp-idf/components/xtensa", "" ]
+}
