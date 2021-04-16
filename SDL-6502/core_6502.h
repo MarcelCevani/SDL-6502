@@ -23,6 +23,19 @@ union word
 	} s;
 };
 
+union dword
+{
+	uint32_t value;
+
+	struct
+	{
+		uint8_t b1;
+		uint8_t b2;
+		uint8_t b3;
+		uint8_t b4;
+	} s;
+};
+
 struct reg_flags
 {
 	uint8_t carry;
@@ -55,6 +68,8 @@ struct mos6502
 struct memorymap
 {
 	uint8_t mem[65536];
+	void* pSubSystem[2]; // 0 = VIC-2 structur
+						 // 1 = frei
 };
 
 struct system
@@ -65,3 +80,4 @@ struct system
 
 extern "C" void init_6502_sytem(struct system *system);
 extern "C" void tick_6502_system(struct system* system);
+extern "C" void generate_irq_6502_system(struct system* system);

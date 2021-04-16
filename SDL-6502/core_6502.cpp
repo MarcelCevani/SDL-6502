@@ -10,12 +10,13 @@
 #include <ws2tcpip.h>
 
 extern SOCKET s;
-extern void write_emu_u8(SOCKET s, uint16_t adr, uint8_t value);
+extern void write_emu_u8(SOCKET s, uint8_t adr, uint8_t value);
 
 inline void update_NZ_Flags(struct system* system, uint8_t value);
 inline void update_V_Flag(struct system* system, uint8_t add_op1, uint8_t add_op2, uint8_t add_result);
 
 void memory_write(struct system* system, uint16_t addr, uint8_t value);
+uint8_t memory_read(struct system* system, uint16_t addr);
 
 uint16_t inst_LDA_I(struct system* system, uint8_t* opPara, uint32_t len, uint32_t cyles);
 uint16_t inst_LDA_IX(struct system* system, uint8_t* opPara, uint32_t len, uint32_t cyles);
@@ -194,18 +195,6 @@ void init_6502_sytem(struct system *system)
 {
 	uint32_t i;
 	uint32_t fkt_count;
-	//uint32_t rom_start = 0xA5FE;
-	
-	//uint32_t rom_start = 0xA5FE; // Paperboy
-
-
-	uint32_t rom_start = 0x0FF6; // Celestrial
-
-
-
-	//uint32_t rom_start = 0x224;
-
-	//uint8_t  opByte;
 
 	memset(system, 0x00, sizeof(struct system));
 
@@ -213,456 +202,613 @@ void init_6502_sytem(struct system *system)
 		system->cpu.opcode[i].fkt = inst_unknown;
 
 	// ORA (Zero Page) 0x05 LEN 2 TIM 3
-	system->cpu.opcode[0x05] = { inst_ORA_Z, 2, 3 , "ORA" };  // x
+	system->cpu.opcode[0x05].fkt = inst_ORA_Z;
+	system->cpu.opcode[0x05].len = 2;
+	system->cpu.opcode[0x05].cyles = 3;
 	// ORA (Zero Page,X) 0x15 LEN 2 TIM 4
-	system->cpu.opcode[0x15] = { inst_ORA_ZX, 2, 4 , "ORA" };  // x
+	system->cpu.opcode[0x15].fkt = inst_ORA_ZX;
+	system->cpu.opcode[0x15].len = 2;
+	system->cpu.opcode[0x15].cyles = 4;
 	// ORA (Absolute) 0x0d LEN 3 TIM 4
-	system->cpu.opcode[0x0d] = { inst_ORA_A, 3, 4 , "ORA" };  // x
-    // ORA (Implied) 0x09 LEN 2 TIM 2
-	system->cpu.opcode[0x09] = { inst_ORA_IM, 2, 2 , "ORA" };  // x
+	system->cpu.opcode[0x0d].fkt = inst_ORA_A;
+	system->cpu.opcode[0x0d].len = 3;
+	system->cpu.opcode[0x0d].cyles = 4;
+	// ORA (Implied) 0x09 LEN 2 TIM 2
+	system->cpu.opcode[0x09].fkt = inst_ORA_IM;
+	system->cpu.opcode[0x09].len = 2;
+	system->cpu.opcode[0x09].cyles = 2;
 	// ORA (Absolute,X) 0x1d LEN 3 TIM 4
-	system->cpu.opcode[0x1d] = { inst_ORA_AX, 3, 4 , "ORA" };  // x
+	system->cpu.opcode[0x1d].fkt = inst_ORA_AX;
+	system->cpu.opcode[0x1d].len = 3;
+	system->cpu.opcode[0x1d].cyles = 4;
 	// ORA (Absolute,Y) 0x19 LEN 3 TIM 4
-	system->cpu.opcode[0x19] = { inst_ORA_AY, 3, 4 , "ORA" };  // x
-	// LDY  (Immidiate) 0xa0 LEN 2 TIM 2	
-	system->cpu.opcode[0xA0] = { inst_LDY_I, 2, 2 , "LDY" };  // x
+	system->cpu.opcode[0x19].fkt = inst_ORA_AY;
+	system->cpu.opcode[0x19].len = 3;
+	system->cpu.opcode[0x19].cyles = 4;
+	// LDY  (Immidiate) 0xa0 LEN 2 TIM 2			 
+	system->cpu.opcode[0xa0].fkt = inst_LDY_I;
+	system->cpu.opcode[0xa0].len = 2;
+	system->cpu.opcode[0xa0].cyles = 2;
 	// CLC  (Implied)   0x18 LEN 1 TIM 2			  
-	system->cpu.opcode[0x18] = { inst_CLC_IM, 1, 2, "CLC" }; // x
+	system->cpu.opcode[0x18].fkt = inst_CLC_IM;
+	system->cpu.opcode[0x18].len = 1;
+	system->cpu.opcode[0x18].cyles = 2;
 	// AND  (Immidiate) 0x29 LEN 2 TIM 2
-	system->cpu.opcode[0x29] = { inst_AND_I, 2, 2 , "AND" };  // x
+	system->cpu.opcode[0x29].fkt = inst_AND_I;
+	system->cpu.opcode[0x29].len = 2;
+	system->cpu.opcode[0x29].cyles = 2;
 	// AND  (Indirect, X) 0x21 LEN 2 TIM 6
-	system->cpu.opcode[0x21] = { inst_AND_IX, 2, 6 , "AND" };  // x
+	system->cpu.opcode[0x21].fkt = inst_AND_IX;
+	system->cpu.opcode[0x21].len = 2;
+	system->cpu.opcode[0x21].cyles = 6;
 	// AND  (Indirect, Y) 0x31 LEN 2 TIM 5
-	system->cpu.opcode[0x31] = { inst_AND_IY, 2, 5 , "AND" };  // x
-	// AND  (Absolute) 0x2D LEN 3 TIM 4
-	system->cpu.opcode[0x2d] = { inst_AND_A, 3, 4 , "AND" };  // x
+	system->cpu.opcode[0x31].fkt = inst_AND_IY;
+	system->cpu.opcode[0x31].len = 2;
+	system->cpu.opcode[0x31].cyles = 5;
+	// AND  (Absolute) 0x2d LEN 3 TIM 4
+	system->cpu.opcode[0x2d].fkt = inst_AND_A;
+	system->cpu.opcode[0x2d].len = 3;
+	system->cpu.opcode[0x2d].cyles = 4;
 	// AND  (Absolute,Y) 0x39 LEN 3 TIM 4
-	system->cpu.opcode[0x39] = { inst_AND_AY, 3, 4 , "AND" };  // x
-    // AND  (Absolute,X) 0x3D LEN 3 TIM 4
-	system->cpu.opcode[0x3d] = { inst_AND_AX, 3, 4 , "AND" };  // x
+	system->cpu.opcode[0x39].fkt = inst_AND_AY;
+	system->cpu.opcode[0x39].len = 3;
+	system->cpu.opcode[0x39].cyles = 4;
+	// AND  (Absolute,X) 0x3d LEN 3 TIM 4
+	system->cpu.opcode[0x3d].fkt = inst_AND_AX;
+	system->cpu.opcode[0x3d].len = 3;
+	system->cpu.opcode[0x3d].cyles = 4;
 	// JMP  (Absolute) 0x4C LEN 3 TIM 3
-	system->cpu.opcode[0x4c] = { inst_JMP_A, 3, 3 , "JMP" };  // x
+	system->cpu.opcode[0x4c].fkt = inst_JMP_A;
+	system->cpu.opcode[0x4c].len = 3;
+	system->cpu.opcode[0x4c].cyles = 3;
 	// JMP  (Indirekt) 0x6C LEN 3 TIM 3
-	system->cpu.opcode[0x6c] = { inst_JMP_I, 3, 5, "JMP" };  // x
-	// ADC  (Immidiate) 0x69 LEN 2 TIM 3			  // Overflow TODO
-	system->cpu.opcode[0x69] = { inst_ADC_I, 2, 2 , "ADC" };
-	// ADC  (Indirekt, X) 0x61 LEN 2 TIM 6			  // Overflow TODO
-	system->cpu.opcode[0x61] = { inst_ADC_IX, 2, 6 , "ADC" };
-	// ADC  (Indirekt, Y) 0x71 LEN 2 TIM 6			  // Overflow TODO
-	system->cpu.opcode[0x71] = { inst_ADC_IY, 2, 6 , "ADC" };
-	// ADC  (Zerro Page) 0x65 LEN 2 TIM 3			  // Overflow TODO
-	system->cpu.opcode[0x65] = { inst_ADC_Z, 2, 3 , "ADC" };
-
+	system->cpu.opcode[0x6c].fkt = inst_JMP_I;
+	system->cpu.opcode[0x6c].len = 3;
+	system->cpu.opcode[0x6c].cyles = 5;
+	// ADC  (Immidiate) 0x69 LEN 2 TIM 2
+	system->cpu.opcode[0x69].fkt = inst_ADC_I;
+	system->cpu.opcode[0x69].len = 2;
+	system->cpu.opcode[0x69].cyles = 2;
+	// ADC  (Indirekt, X) 0x61 LEN 2 TIM 6
+	system->cpu.opcode[0x61].fkt = inst_ADC_IX;
+	system->cpu.opcode[0x61].len = 2;
+	system->cpu.opcode[0x61].cyles = 6;
+	// ADC  (Indirekt, Y) 0x71 LEN 2 TIM 6
+	system->cpu.opcode[0x71].fkt = inst_ADC_IY;
+	system->cpu.opcode[0x71].len = 2;
+	system->cpu.opcode[0x71].cyles = 6;
+	// ADC  (Zerro Page) 0x65 LEN 2 TIM 3
+	system->cpu.opcode[0x65].fkt = inst_ADC_Z;
+	system->cpu.opcode[0x65].len = 2;
+	system->cpu.opcode[0x65].cyles = 3;
 	// ADC  (Zerro Page,X) 0x75 LEN 2 TIM 4			  
-	system->cpu.opcode[0x75] = { inst_ADC_ZX, 2, 4 , "ADC" };
-
-	// ADC  (Absolute) 0x6D LEN 3 TIM 4			  // Overflow TODO
-	system->cpu.opcode[0x6D] = { inst_ADC_A, 3, 4 , "ADC" };
-	
-	// ADC  (Absolute,X) 0x7d LEN 3 TIM 4			  // Overflow TODO
-	system->cpu.opcode[0x7d] = { inst_ADC_AX, 3, 4 , "ADC" };
-	
-	// ADC  (Absolute,Y) 0x79 LEN 3 TIM 4			  // Overflow TODO
-	system->cpu.opcode[0x79] = { inst_ADC_AY, 3, 4 , "ADC" };
-
-	
+	system->cpu.opcode[0x75].fkt = inst_ADC_ZX;
+	system->cpu.opcode[0x75].len = 2;
+	system->cpu.opcode[0x75].cyles = 4;
+	// ADC  (Absolute) 0x6d LEN 3 TIM 4
+	system->cpu.opcode[0x6d].fkt = inst_ADC_A;
+	system->cpu.opcode[0x6d].len = 3;
+	system->cpu.opcode[0x6d].cyles = 4;
+	// ADC  (Absolute,X) 0x7d LEN 3 TIM 4
+	system->cpu.opcode[0x7d].fkt = inst_ADC_AX;
+	system->cpu.opcode[0x7d].len = 3;
+	system->cpu.opcode[0x7d].cyles = 4;
+	// ADC  (Absolute,Y) 0x79 LEN 3 TIM 4
+	system->cpu.opcode[0x79].fkt = inst_ADC_AY;
+	system->cpu.opcode[0x79].len = 3;
+	system->cpu.opcode[0x79].cyles = 4;
 	// ADC  (Indirect,Y) 0x71 LEN 2 TIM 5
-	system->cpu.opcode[0x71] = { inst_ADC_IY, 2, 5 , "ADC" };
-
+	system->cpu.opcode[0x71].fkt = inst_ADC_IY;
+	system->cpu.opcode[0x71].len = 2;
+	system->cpu.opcode[0x71].cyles = 5;
 	// LDA  (Indirect,X) 0xa1 LEN 2 TIM 2
-	system->cpu.opcode[0xa1] = { inst_LDA_IX, 2, 2 , "LDA" }; // ok?
+	system->cpu.opcode[0xa1].fkt = inst_LDA_IX;
+	system->cpu.opcode[0xa1].len = 2;
+	system->cpu.opcode[0xa1].cyles = 2;
 	// LDX  (Immidiate) 0xa2 LEN 2 TIM 2
-	system->cpu.opcode[0xa2] = { inst_LDX_I, 2, 2 , "LDX" }; // ok?
+	system->cpu.opcode[0xa2].fkt = inst_LDX_I;
+	system->cpu.opcode[0xa2].len = 2;
+	system->cpu.opcode[0xa2].cyles = 2;
 	// LDA  (Zero Page) 0xa5 LEN 2 TIM 3
-	system->cpu.opcode[0xa5] = { inst_LDA_Z, 2, 3 , "LDA" }; // ok?
+	system->cpu.opcode[0xa5].fkt = inst_LDA_Z;
+	system->cpu.opcode[0xa5].len = 2;
+	system->cpu.opcode[0xa5].cyles = 3;
 	// LDX  (Zero Page) 0xa6 LEN 2 TIM 3
-	system->cpu.opcode[0xa6] = { inst_LDX_Z, 2, 3, "LDX" }; // ok?
-	// LDX  (Zero Page, Y) 0xb6 LEN 2 TIM 3
-	system->cpu.opcode[0xb6] = { inst_LDX_ZY, 2, 3, "LDX" }; // ok?
-	
+	system->cpu.opcode[0xa6].fkt = inst_LDX_Z;
+	system->cpu.opcode[0xa6].len = 2;
+	system->cpu.opcode[0xa6].cyles = 3;
+	// LDX  (Zero Page, Y) 0xb6 LEN 2 TIM 4
+	system->cpu.opcode[0xb6].fkt = inst_LDX_ZY;
+	system->cpu.opcode[0xb6].len = 2;
+	system->cpu.opcode[0xb6].cyles = 3;
 	// LDY  (Zero Page, X) 0xb4 LEN 2 TIM 3
-	system->cpu.opcode[0xb4] = { inst_LDY_ZX, 2, 3, "LDY" }; // ok?
-
+	system->cpu.opcode[0xb4].fkt = inst_LDY_ZX;
+	system->cpu.opcode[0xb4].len = 2;
+	system->cpu.opcode[0xb4].cyles = 3;
 	// LDX  (Absolute) 0xae LEN 3 TIM 4
-	system->cpu.opcode[0xae] = { inst_LDX_A, 3, 4 , "LDX" }; // ok?
+	system->cpu.opcode[0xae].fkt = inst_LDX_A;
+	system->cpu.opcode[0xae].len = 3;
+	system->cpu.opcode[0xae].cyles = 4;
 	// LDX  (Absolute,Y) 0xbe LEN 3 TIM 4
-	system->cpu.opcode[0xbe] = { inst_LDX_AY, 3, 4 , "LDX" }; // ok?
+	system->cpu.opcode[0xbe].fkt = inst_LDX_AY;
+	system->cpu.opcode[0xbe].len = 3;
+	system->cpu.opcode[0xbe].cyles = 4;
 	// LDY  (Absolute) 0xac LEN 3 TIM 4
-	system->cpu.opcode[0xac] = { inst_LDY_A, 3, 4 , "LDY" }; // ok?
-	// DEC  (Zero Page) 0xC6 LEN 2 TIM 5
-	system->cpu.opcode[0xC6] = { inst_DEC_Z, 2, 5 , "DEC" }; // ok?
-	
+	system->cpu.opcode[0xac].fkt = inst_LDY_A;
+	system->cpu.opcode[0xac].len = 3;
+	system->cpu.opcode[0xac].cyles = 4;
+	// DEC  (Zero Page) 0xc6 LEN 2 TIM 5
+	system->cpu.opcode[0xc6].fkt = inst_DEC_Z;
+	system->cpu.opcode[0xc6].len = 2;
+	system->cpu.opcode[0xc6].cyles = 5;
 	// DEC  (Zero Page,X) 0xD6 LEN 2 TIM 6
-	system->cpu.opcode[0xD6] = { inst_DEC_ZX, 2, 6 , "DEC" }; // ok?
-
-
-	// DEC  (Absolute) 0xCE LEN 3 TIM 6
-	system->cpu.opcode[0xCE] = { inst_DEC_A, 3, 6 , "DEC" }; // ok?
+	system->cpu.opcode[0xd6].fkt = inst_DEC_ZX;
+	system->cpu.opcode[0xd6].len = 2;
+	system->cpu.opcode[0xd6].cyles = 6;
+	// DEC  (Absolute) 0xce LEN 3 TIM 6
+	system->cpu.opcode[0xce].fkt = inst_DEC_A;
+	system->cpu.opcode[0xce].len = 3;
+	system->cpu.opcode[0xce].cyles = 6;
 	// DEC  (Absolute,X) 0xde LEN 3 TIM 7
-	system->cpu.opcode[0xde] = { inst_DEC_AX, 3, 7, "DEC" }; // ok?
+	system->cpu.opcode[0xde].fkt = inst_DEC_AX;
+	system->cpu.opcode[0xde].len = 3;
+	system->cpu.opcode[0xde].cyles = 7;
 	// LDA  (Immediate) 0xa9 LEN 2 TIM 2
-	system->cpu.opcode[0xa9] = { inst_LDA_I, 2, 2, "LDA" };
-	// LDA  (Absolute,X) 0xbd LEN 3 TIM 4+
-	system->cpu.opcode[0xbd] = { inst_LDA_AX, 3, 4, "LDA" };
-	// LDA  (Absolute,Y) 0xb9 LEN 3 TIM 4+
-	system->cpu.opcode[0xb9] = { inst_LDA_AY, 3, 4, "LDA" };
+	system->cpu.opcode[0xa9].fkt = inst_LDA_I;
+	system->cpu.opcode[0xa9].len = 2;
+	system->cpu.opcode[0xa9].cyles = 2;
+	// LDA  (Absolute,X) 0xbd LEN 3 TIM 4
+	system->cpu.opcode[0xbd].fkt = inst_LDA_AX;
+	system->cpu.opcode[0xbd].len = 3;
+	system->cpu.opcode[0xbd].cyles = 4;
+	// LDA  (Absolute,Y) 0xb9 LEN 3 TIM 4
+	system->cpu.opcode[0xb9].fkt = inst_LDA_AY;
+	system->cpu.opcode[0xb9].len = 3;
+	system->cpu.opcode[0xb9].cyles = 4;
 	// CMP  (Immediate) 0xc9 LEN 2 TIM 2
-	system->cpu.opcode[0xc9] = { inst_CMP_I, 2, 2, "CMP" };
-	
-	// CMP  (Zero Page) 0xc5 LEN 2 TIM 2
-	system->cpu.opcode[0xc5] = { inst_CMP_Z, 2, 3 , "CMP" };
-	
+	system->cpu.opcode[0xc9].fkt = inst_CMP_I;
+	system->cpu.opcode[0xc9].len = 2;
+	system->cpu.opcode[0xc9].cyles = 2;
+	// CMP  (Zero Page) 0xc5 LEN 2 TIM 3
+	system->cpu.opcode[0xc5].fkt = inst_CMP_Z;
+	system->cpu.opcode[0xc5].len = 2;
+	system->cpu.opcode[0xc5].cyles = 3;
 	// CMP  (Absolute) 0xcd LEN 3 TIM 4
-	system->cpu.opcode[0xcd] = { inst_CMP_A, 3, 4 , "CMP" };
-	
-
+	system->cpu.opcode[0xcd].fkt = inst_CMP_A;
+	system->cpu.opcode[0xcd].len = 3;
+	system->cpu.opcode[0xcd].cyles = 4;
 	// CPY  (Absolute) 0xcc LEN 3 TIM 4
-	system->cpu.opcode[0xcc] = { inst_CPY_A, 3, 4 , "CPY" };
-
-
-	
+	system->cpu.opcode[0xcc].fkt = inst_CPY_A;
+	system->cpu.opcode[0xcc].len = 3;
+	system->cpu.opcode[0xcc].cyles = 4;
 	// CMP  (Absolute,X) 0xdd LEN 3 TIM 4
-	system->cpu.opcode[0xdd] = { inst_CMP_AX, 3, 4 , "CMP" };
-	
+	system->cpu.opcode[0xdd].fkt = inst_CMP_AX;
+	system->cpu.opcode[0xdd].len = 3;
+	system->cpu.opcode[0xdd].cyles = 4;
 	// CMP  (Absolute,Y) 0xd9 LEN 3 TIM 4
-	system->cpu.opcode[0xd9] = { inst_CMP_AY, 3, 4 , "CMP" };
-
-
+	system->cpu.opcode[0xd9].fkt = inst_CMP_AY;
+	system->cpu.opcode[0xd9].len = 3;
+	system->cpu.opcode[0xd9].cyles = 4;
 	// CPY  (Immediate) 0xc0 LEN 2 TIM 2
-	system->cpu.opcode[0xc0] = { inst_CPY_I, 2, 2 , "CPY" };
-
-
+	system->cpu.opcode[0xc0].fkt = inst_CPY_I;
+	system->cpu.opcode[0xc0].len = 2;
+	system->cpu.opcode[0xc0].cyles = 2;
 	// CPY  (Zerropage) 0xc4 LEN 2 TIM 3
-	system->cpu.opcode[0xc4] = { inst_CPY_Z, 2, 3 , "CPY" };
-
-
+	system->cpu.opcode[0xc4].fkt = inst_CPY_Z;
+	system->cpu.opcode[0xc4].len = 2;
+	system->cpu.opcode[0xc4].cyles = 3;
 	// CMX  (Immediate) 0xe0 LEN 2 TIM 2
-	system->cpu.opcode[0xe0] = { inst_CMX_I, 2, 2 , "CMX" };
+	system->cpu.opcode[0xe0].fkt = inst_CMX_I;
+	system->cpu.opcode[0xe0].len = 2;
+	system->cpu.opcode[0xe0].cyles = 2;
 	// BNE  (Branch not Equal) 0xd0 LEN 2 TIM 2
-	system->cpu.opcode[0xd0] = { inst_BNE, 2, 2 , "BNE" };
+	system->cpu.opcode[0xd0].fkt = inst_BNE;
+	system->cpu.opcode[0xd0].len = 2;
+	system->cpu.opcode[0xd0].cyles = 2;
 	// BMI  (Branch on MInus) 0x30 LEN 2 TIM 2
-	system->cpu.opcode[0x30] = { inst_BMI, 2, 2 , "MBI" };
+	system->cpu.opcode[0x30].fkt = inst_BMI;
+	system->cpu.opcode[0x30].len = 2;
+	system->cpu.opcode[0x30].cyles = 2;
 	// BEQ  (Branch On Equal) 0xf0 LEN 2 TIM 2
-	system->cpu.opcode[0xf0] = { inst_BEQ, 2, 2, "BEQ" };
+	system->cpu.opcode[0xf0].fkt = inst_BEQ;
+	system->cpu.opcode[0xf0].len = 2;
+	system->cpu.opcode[0xf0].cyles = 2;
 	// BCC  (Branch on Carry Clear) 0x90 LEN 2 TIM 2
-	system->cpu.opcode[0x90] = { inst_BCC, 2, 2 , "BCC" };
+	system->cpu.opcode[0x90].fkt = inst_BCC;
+	system->cpu.opcode[0x90].len = 2;
+	system->cpu.opcode[0x90].cyles = 2;
 	// BCS  (Branch on Carry Set) 0xB0 LEN 2 TIM 2
-	system->cpu.opcode[0xB0] = { inst_BCS, 2, 2 , "BCS" };
+	system->cpu.opcode[0xB0].fkt = inst_BCS;
+	system->cpu.opcode[0xB0].len = 2;
+	system->cpu.opcode[0xB0].cyles = 2;
 	// STA  (Indirect, X) 0x81 LEN 2 TIM 6
-	system->cpu.opcode[0x81] = { inst_STA_IX, 2, 6 , "STA" }; // ok?
+	system->cpu.opcode[0x81].fkt = inst_STA_IX;
+	system->cpu.opcode[0x81].len = 2;
+	system->cpu.opcode[0x81].cyles = 6;
 	// STA  (Zero Page) 0x85 LEN 2 TIM 3
-	system->cpu.opcode[0x85] = { inst_STA_Z, 2, 3 , "STA" }; // ok?
+	system->cpu.opcode[0x85].fkt = inst_STA_Z;
+	system->cpu.opcode[0x85].len = 2;
+	system->cpu.opcode[0x85].cyles = 3;
 	// STA  (Immidiate Y) 0x91 LEN 2 TIM 6
-	system->cpu.opcode[0x91] = { inst_STA_IY, 2, 6 , "STA" }; // ok?
+	system->cpu.opcode[0x91].fkt = inst_STA_IY;
+	system->cpu.opcode[0x91].len = 2;
+	system->cpu.opcode[0x91].cyles = 6;
 	// LDA  (Indirect, Y) 0xB1 LEN 2 TIM 5
-	system->cpu.opcode[0xB1] = { inst_LDA_IY, 2, 5 , "LDA" }; // ok?
-	// TAX  (Transfer A to X) 0xAA LEN 1 TIM 2
-	system->cpu.opcode[0xAA] = { inst_TAX, 1, 2 , "TAX" }; // ok?
-	// TXA  (Transfer X to A) 0x8A LEN 1 TIM 2
-	system->cpu.opcode[0x8A] = { inst_TXA, 1, 2 , "TXA" }; // ok?
+	system->cpu.opcode[0xb1].fkt = inst_LDA_IY;
+	system->cpu.opcode[0xb1].len = 2;
+	system->cpu.opcode[0xb1].cyles = 5;
+	// TAX  (Transfer A to X) 0xaa LEN 1 TIM 2
+	system->cpu.opcode[0xaa].fkt = inst_TAX;
+	system->cpu.opcode[0xaa].len = 1;
+	system->cpu.opcode[0xaa].cyles = 2;
+	// TXA  (Transfer X to A) 0x8a LEN 1 TIM 2
+	system->cpu.opcode[0x8a].fkt = inst_TXA;
+	system->cpu.opcode[0x8a].len = 1;
+	system->cpu.opcode[0x8a].cyles = 2;
 	// TYA  (Transfer Y to A) 0x98 LEN 1 TIM 2
-	system->cpu.opcode[0x98] = { inst_TYA, 1, 2, "TYA" }; // ok?
-	// INY  (INcrement Y) 0xC8 LEN 1 TIM 2
-	system->cpu.opcode[0xC8] = { inst_INY, 1, 2, "INY" }; // ok?
-	// JSR  (Jump to SubRoutine) 0x20 LEN 3 TIM 2
-	system->cpu.opcode[0x20] = { inst_JSR, 3, 6 ,"JSR" }; // ok?
+	system->cpu.opcode[0x98].fkt = inst_TYA;
+	system->cpu.opcode[0x98].len = 1;
+	system->cpu.opcode[0x98].cyles = 2;
+	// INY  (INcrement Y) 0xc8 LEN 1 TIM 2
+	system->cpu.opcode[0xc8].fkt = inst_INY;
+	system->cpu.opcode[0xc8].len = 1;
+	system->cpu.opcode[0xc8].cyles = 2;
+	// JSR  (Jump to SubRoutine) 0x20 LEN 3 TIM 6
+	system->cpu.opcode[0x20].fkt = inst_JSR;
+	system->cpu.opcode[0x20].len = 3;
+	system->cpu.opcode[0x20].cyles = 6;
 	// STY  (Zero Page) 0x84 LEN 2 TIM 3
-	system->cpu.opcode[0x84] = { inst_STY_Z, 2, 3 , "STY" };
-	
+	system->cpu.opcode[0x84].fkt = inst_STY_Z;
+	system->cpu.opcode[0x84].len = 2;
+	system->cpu.opcode[0x84].cyles = 3;
 	// STY  (Zero Page, X) 0x94 LEN 2 TIM 4
-	system->cpu.opcode[0x94] = { inst_STY_ZX, 2, 4 , "STY" };
-
-
+	system->cpu.opcode[0x94].fkt = inst_STY_ZX;
+	system->cpu.opcode[0x94].len = 2;
+	system->cpu.opcode[0x94].cyles = 4;
 	// STY  (Absolute) 0x8c LEN 2 TIM 3
-	system->cpu.opcode[0x8c] = { inst_STY_A, 3, 4, "STY" };
+	system->cpu.opcode[0x8c].fkt = inst_STY_A;
+	system->cpu.opcode[0x8c].len = 3;
+	system->cpu.opcode[0x8c].cyles = 4;
 	// STX  (Zero Page) 0x86 LEN 2 TIM 3
-	system->cpu.opcode[0x86] = { inst_STX_Z, 2, 3 , "STX" };
-
-	// STX  (Zero Page,Y) 0x96 LEN 2 TIM 3
-	system->cpu.opcode[0x96] = { inst_STX_ZY, 2, 4 , "STX" };
-
-
-	// STX  (Absolute) 0x8E LEN 3 TIM 4
-	system->cpu.opcode[0x8E] = { inst_STX_A, 3, 4 , "STX" };
-	// LDY  (Zero Page) 0xA4 LEN 2 TIM 3
-	system->cpu.opcode[0xA4] = { inst_LDY_Z, 2, 3 , "LDY" };
+	system->cpu.opcode[0x86].fkt = inst_STX_Z;
+	system->cpu.opcode[0x86].len = 2;
+	system->cpu.opcode[0x86].cyles = 3;
+	// STX  (Zero Page,Y) 0x96 LEN 2 TIM 4
+	system->cpu.opcode[0x96].fkt = inst_STX_ZY;
+	system->cpu.opcode[0x96].len = 2;
+	system->cpu.opcode[0x96].cyles = 4;
+	// STX  (Absolute) 0x8e LEN 3 TIM 4
+	system->cpu.opcode[0x8e].fkt = inst_STX_A;
+	system->cpu.opcode[0x8e].len = 3;
+	system->cpu.opcode[0x8e].cyles = 4;
+	// LDY  (Zero Page) 0xa4 LEN 2 TIM 3
+	system->cpu.opcode[0xa4].fkt = inst_LDY_Z;
+	system->cpu.opcode[0xa4].len = 2;
+	system->cpu.opcode[0xa4].cyles = 3;
 	// RTS  (ReTurn from Subroutine) 0x60 LEN 1 TIM 6
-	system->cpu.opcode[0x60] = { inst_RTS, 1, 6 , "RTS" };
-	// DEX  (DEcrement X) 0xCA LEN 1 TIM 2
-	system->cpu.opcode[0xCA] = { inst_DEX, 1, 2 , "DEX" };
+	system->cpu.opcode[0x60].fkt = inst_RTS;
+	system->cpu.opcode[0x60].len = 1;
+	system->cpu.opcode[0x60].cyles = 6;
+	// DEX  (DEcrement X) 0xca LEN 1 TIM 2
+	system->cpu.opcode[0xca].fkt = inst_DEX;
+	system->cpu.opcode[0xca].len = 1;
+	system->cpu.opcode[0xca].cyles = 2;
 	// DEY  (DEcrement Y) 0x88 LEN 1 TIM 2
-	system->cpu.opcode[0x88] = { inst_DEY, 1, 2 , "DEY" };
+	system->cpu.opcode[0x88].fkt = inst_DEY;
+	system->cpu.opcode[0x88].len = 1;
+	system->cpu.opcode[0x88].cyles = 2;
 	// BPL  (Branch On Equal) 0x10 LEN 2 TIM 2
-	system->cpu.opcode[0x10] = { inst_BPL, 2, 2 , "BPL" };
-	// INX  (INcrement X) 0xE8 LEN 1 TIM 2
-	system->cpu.opcode[0xE8] = { inst_INX, 1, 2 , "INX" };
-	// INC  (Zero Page) 0xE6 LEN 2 TIM 5
-	system->cpu.opcode[0xE6] = { inst_INC_Z, 2, 5 , "INC" };
-	
-	// INC  (Zero Page,X) 0xF6 LEN 2 TIM 6
-	system->cpu.opcode[0xF6] = { inst_INC_ZX, 2, 6 , "INC" };
-
-	// INC  (Absolute) 0xEE LEN 3 TIM 6
-	system->cpu.opcode[0xEE] = { inst_INC_A, 3, 6 , "INC"};
-	// STA  (Absolute,X) 0x9D LEN 3 TIM 5
-	system->cpu.opcode[0x9D] = { inst_STA_AX, 3, 5 , "STA" };
+	system->cpu.opcode[0x10].fkt = inst_BPL;
+	system->cpu.opcode[0x10].len = 2;
+	system->cpu.opcode[0x10].cyles = 2;
+	// INX  (INcrement X) 0xe8 LEN 1 TIM 2
+	system->cpu.opcode[0xe8].fkt = inst_INX;
+	system->cpu.opcode[0xe8].len = 1;
+	system->cpu.opcode[0xe8].cyles = 2;
+	// INC  (Zero Page) 0xe6 LEN 2 TIM 5
+	system->cpu.opcode[0xe6].fkt = inst_INC_Z;
+	system->cpu.opcode[0xe6].len = 2;
+	system->cpu.opcode[0xe6].cyles = 5;
+	// INC  (Zero Page,X) 0xf6 LEN 2 TIM 6
+	system->cpu.opcode[0xf6].fkt = inst_INC_ZX;
+	system->cpu.opcode[0xf6].len = 2;
+	system->cpu.opcode[0xf6].cyles = 6;
+	// INC  (Absolute) 0xee LEN 3 TIM 6
+	system->cpu.opcode[0xee].fkt = inst_INC_A;
+	system->cpu.opcode[0xee].len = 3;
+	system->cpu.opcode[0xee].cyles = 6;
+	// STA  (Absolute,X) 0x9d LEN 3 TIM 5
+	system->cpu.opcode[0x9d].fkt = inst_STA_AX;
+	system->cpu.opcode[0x9d].len = 3;
+	system->cpu.opcode[0x9d].cyles = 5;
 	// STA  (Absolute,Y) 0x99 LEN 3 TIM 5
-	system->cpu.opcode[0x99] = { inst_STA_AY, 3, 5 , "STA" };
+	system->cpu.opcode[0x99].fkt = inst_STA_AY;
+	system->cpu.opcode[0x99].len = 3;
+	system->cpu.opcode[0x99].cyles = 5;
 	// STA  (Zero Page, X) 0x95 LEN 2 TIM 4
-	system->cpu.opcode[0x95] = { inst_STA_ZX, 2, 4 , "STA" };
-	// LDA (Zero Page, X) 0xB5 LEN 2 TIM 4
-	system->cpu.opcode[0xB5] = { inst_LDA_ZX, 2, 4 , "LDA" };
-	// ASL  (Arithmetic Shift Left) 0x0A LEN 1 TIM 2
-	system->cpu.opcode[0x0A] = { inst_ASL, 1, 2 , "ASL" };
-	
-	// ASL  (Absolute) 0x0E LEN 1 TIM 2
-	system->cpu.opcode[0x0E] = { inst_ASL_A, 3, 6 , "ASL" };
-
-	// ASL  (Absolute,X) 0x1E LEN 3 TIM 7
-	system->cpu.opcode[0x1E] = { inst_ASL_AX, 3, 7 , "ASL" };
-
-
+	system->cpu.opcode[0x95].fkt = inst_STA_ZX;
+	system->cpu.opcode[0x95].len = 2;
+	system->cpu.opcode[0x95].cyles = 4;
+	// LDA (Zero Page, X) 0xb5 LEN 2 TIM 4
+	system->cpu.opcode[0xb5].fkt = inst_LDA_ZX;
+	system->cpu.opcode[0xb5].len = 2;
+	system->cpu.opcode[0xb5].cyles = 4;
+	// ASL  (Arithmetic Shift Left) 0x0a LEN 1 TIM 2
+	system->cpu.opcode[0x0a].fkt = inst_ASL;
+	system->cpu.opcode[0x0a].len = 1;
+	system->cpu.opcode[0x0a].cyles = 2;
+	// ASL  (Absolute) 0x0e LEN 3 TIM 6
+	system->cpu.opcode[0x0e].fkt = inst_ASL_A;
+	system->cpu.opcode[0x0e].len = 3;
+	system->cpu.opcode[0x0e].cyles = 6;
+	// ASL  (Absolute,X) 0x1e LEN 3 TIM 7
+	system->cpu.opcode[0x1e].fkt = inst_ASL_AX;
+	system->cpu.opcode[0x1e].len = 3;
+	system->cpu.opcode[0x1e].cyles = 7;
 	// ASL  (Arithmetic Shift Left, ZerroPage) 0x06 LEN 2 TIM 5
-	system->cpu.opcode[0x06] = { inst_ASL_Z, 2, 5 , "ASL" };
-
+	system->cpu.opcode[0x06].fkt = inst_ASL_Z;
+	system->cpu.opcode[0x06].len = 2;
+	system->cpu.opcode[0x06].cyles = 5;
 	// ASL  (ZerroPage,X) 0x16 LEN 2 TIM 5
-	system->cpu.opcode[0x16] = { inst_ASL_ZX, 2, 6 , "ASL" };
-
-	
-	// TAY  (Transfer A to Y) 0xA8 LEN 1 TIM 2
-	system->cpu.opcode[0xA8] = { inst_TAY, 1, 2 , "TAY" };
-	
-	// SBC (Zerropage) 0xE5 LEN 2 TIM 3
-	system->cpu.opcode[0xE5] = { inst_SBC_Z, 2, 3 , "SBC" };
-	
-	// SBC (Immediate) 0xE9 LEN 2 TIM 2
-	system->cpu.opcode[0xE9] = { inst_SBC_I, 2, 2 , "SBC" };
-	
-	
-	
-	// SBC (Indirekt,X) 0xE1 LEN 2 TIM 6
-	system->cpu.opcode[0xE1] = { inst_SBC_IX, 2, 6 , "SBC" };
-
-	// SBC (Indirekt,Y) 0xF1 LEN 2 TIM 5
-	system->cpu.opcode[0xF1] = { inst_SBC_IY, 2, 5 , "SBC" };
-
-
-	// SBC (Absolute) 0xED LEN 3 TIM 4
-	system->cpu.opcode[0xED] = { inst_SBC_A, 3, 4 , "SBC" };
-
-	
-	// SBC (Absolute,X) 0xFD LEN 3 TIM 4
-	system->cpu.opcode[0xFD] = { inst_SBC_AX, 3, 4 , "SBC" };
-
-	// SBC (Absolute,Y) 0xF9 LEN 3 TIM 4
-	system->cpu.opcode[0xF9] = { inst_SBC_AY, 3, 4 , "SBC" };
-
-
-
+	system->cpu.opcode[0x16].fkt = inst_ASL_ZX;
+	system->cpu.opcode[0x16].len = 2;
+	system->cpu.opcode[0x16].cyles = 6;
+	// TAY  (Transfer A to Y) 0xa8 LEN 1 TIM 2
+	system->cpu.opcode[0xa8].fkt = inst_TAY;
+	system->cpu.opcode[0xa8].len = 1;
+	system->cpu.opcode[0xa8].cyles = 2;
+	// SBC (Zerropage) 0xe5 LEN 2 TIM 3
+	system->cpu.opcode[0xe5].fkt = inst_SBC_Z;
+	system->cpu.opcode[0xe5].len = 2;
+	system->cpu.opcode[0xe5].cyles = 3;
+	// SBC (Immediate) 0xe9 LEN 2 TIM 2
+	system->cpu.opcode[0xe9].fkt = inst_SBC_I;
+	system->cpu.opcode[0xe9].len = 2;
+	system->cpu.opcode[0xe9].cyles = 2;
+	// SBC (Indirekt,X) 0xe1 LEN 2 TIM 6
+	system->cpu.opcode[0xe1].fkt = inst_SBC_IX;
+	system->cpu.opcode[0xe1].len = 2;
+	system->cpu.opcode[0xe1].cyles = 6;
+	// SBC (Indirekt,Y) 0xf1 LEN 2 TIM 5
+	system->cpu.opcode[0xf1].fkt = inst_SBC_IY;
+	system->cpu.opcode[0xf1].len = 2;
+	system->cpu.opcode[0xf1].cyles = 5;
+	// SBC (Absolute) 0xed LEN 3 TIM 4
+	system->cpu.opcode[0xed].fkt = inst_SBC_A;
+	system->cpu.opcode[0xed].len = 3;
+	system->cpu.opcode[0xed].cyles = 4;
+	// SBC (Absolute,X) 0xfd LEN 3 TIM 4
+	system->cpu.opcode[0xfd].fkt = inst_SBC_AX;
+	system->cpu.opcode[0xfd].len = 3;
+	system->cpu.opcode[0xfd].cyles = 4;
+	// SBC (Absolute,Y) 0xf9 LEN 3 TIM 4
+	system->cpu.opcode[0xf9].fkt = inst_SBC_AY;
+	system->cpu.opcode[0xf9].len = 3;
+	system->cpu.opcode[0xf9].cyles = 4;
 	// SEC (SEt Carry) 0x38 LEN 1 TIM 2
-	system->cpu.opcode[0x38] = { inst_SEC_IM, 1, 2 , "SEC" };
-	// LSR (Logical Shift Right) 0x4A LEN 1 TIM 2
-	system->cpu.opcode[0x4A] = { inst_LSR, 1, 2 , "LSR" };
+	system->cpu.opcode[0x38].fkt = inst_SEC_IM;
+	system->cpu.opcode[0x38].len = 1;
+	system->cpu.opcode[0x38].cyles = 2;
+	// LSR (Logical Shift Right) 0x4a LEN 1 TIM 2
+	system->cpu.opcode[0x4a].fkt = inst_LSR;
+	system->cpu.opcode[0x4a].len = 1;
+	system->cpu.opcode[0x4a].cyles = 2;
 	// LSR (Logical Shift Right, ZerroPage) 0x46 LEN 2 TIM 5
-	system->cpu.opcode[0x46] = { inst_LSR_Z, 2, 5 , "LSR" };
-	
-	
-	
+	system->cpu.opcode[0x46].fkt = inst_LSR_Z;
+	system->cpu.opcode[0x46].len = 2;
+	system->cpu.opcode[0x46].cyles = 5;
 	// LSR (ZerroPage,X) 0x56 LEN 2 TIM 5
-	system->cpu.opcode[0x56] = { inst_LSR_ZX, 2, 6 , "LSR" };
-
-	
-	
-	// LSR (Logical Shift Right) 0x4A LEN 1 TIM 2
-	system->cpu.opcode[0x4E] = { inst_LSR_A, 3, 6 , "LSR" };
-	
+	system->cpu.opcode[0x56].fkt = inst_LSR_ZX;
+	system->cpu.opcode[0x56].len = 2;
+	system->cpu.opcode[0x56].cyles = 6;
+	// LSR (Logical Shift Right) 0x4e LEN 3 TIM 6
+	system->cpu.opcode[0x4e].fkt = inst_LSR_A;
+	system->cpu.opcode[0x4e].len = 3;
+	system->cpu.opcode[0x4e].cyles = 6;
 	// LSR (Absolute,X) 0x5e LEN 3 TIM 7
-	system->cpu.opcode[0x5e] = { inst_LSR_AX, 3, 7 , "LSR" };
-
-	
+	system->cpu.opcode[0x5e].fkt = inst_LSR_AX;
+	system->cpu.opcode[0x5e].len = 3;
+	system->cpu.opcode[0x5e].cyles = 7;
 	// AND (Zerro Page) 0x25 LEN 2 TIM 3
-	system->cpu.opcode[0x25] = { inst_AND_Z, 2, 3 , "AND" };
-
+	system->cpu.opcode[0x25].fkt = inst_AND_Z;
+	system->cpu.opcode[0x25].len = 2;
+	system->cpu.opcode[0x25].cyles = 3;
 	// AND (Zerro Page,X) 0x35 LEN 2 TIM 4
-	system->cpu.opcode[0x35] = { inst_AND_ZX, 2, 4 , "AND" };
-
-
-	// STA  (Absolute) 0x8D LEN 3 TIM 4
-	system->cpu.opcode[0x8D] = { inst_STA_A, 3, 4 , "STA" };
-	
+	system->cpu.opcode[0x35].fkt = inst_AND_ZX;
+	system->cpu.opcode[0x35].len = 2;
+	system->cpu.opcode[0x35].cyles = 4;
+	// STA  (Absolute) 0x8d LEN 3 TIM 4
+	system->cpu.opcode[0x8d].fkt = inst_STA_A;
+	system->cpu.opcode[0x8d].len = 3;
+	system->cpu.opcode[0x8d].cyles = 4;
 	// EOR (Immediate) 0x49 LEN 2 TIM 2
-	system->cpu.opcode[0x49] = { inst_EOR_I, 2, 2 , "EOR" };
-	
+	system->cpu.opcode[0x49].fkt = inst_EOR_I;
+	system->cpu.opcode[0x49].len = 2;
+	system->cpu.opcode[0x49].cyles = 2;
 	// EOR (Zeropage) 0x45 LEN 2 TIM 3
-	system->cpu.opcode[0x45] = { inst_EOR_Z, 2, 3 , "EOR" };
-
-
+	system->cpu.opcode[0x45].fkt = inst_EOR_Z;
+	system->cpu.opcode[0x45].len = 2;
+	system->cpu.opcode[0x45].cyles = 3;
 	// EOR (Indirekt, X) 0x41 LEN 2 TIM 6
-	system->cpu.opcode[0x41] = { inst_EOR_IX, 2, 6 , "EOR" };
-
+	system->cpu.opcode[0x41].fkt = inst_EOR_IX;
+	system->cpu.opcode[0x41].len = 2;
+	system->cpu.opcode[0x41].cyles = 6;
 	// EOR (Zeropage,X) 0x55 LEN 2 TIM 4
-	system->cpu.opcode[0x55] = { inst_EOR_ZX, 2, 4 , "EOR" };
-
-
-	// EOR (Absolute) 0x4D LEN 3 TIM 4
-	system->cpu.opcode[0x4D] = { inst_EOR_A, 3, 4 , "EOR" };
-
-	// EOR (Absolute,X) 0x5D LEN 3 TIM 4
-	system->cpu.opcode[0x5D] = { inst_EOR_AX, 3, 4 , "EOR" };
-
+	system->cpu.opcode[0x55].fkt = inst_EOR_ZX;
+	system->cpu.opcode[0x55].len = 2;
+	system->cpu.opcode[0x55].cyles = 4;
+	// EOR (Absolute) 0x4d LEN 3 TIM 4
+	system->cpu.opcode[0x4d].fkt = inst_EOR_A;
+	system->cpu.opcode[0x4d].len = 3;
+	system->cpu.opcode[0x4d].cyles = 4;
+	// EOR (Absolute,X) 0x5d LEN 3 TIM 4
+	system->cpu.opcode[0x5d].fkt = inst_EOR_AX;
+	system->cpu.opcode[0x5d].len = 3;
+	system->cpu.opcode[0x5d].cyles = 4;
 	// EOR (Absolute,Y) 0x59 LEN 3 TIM 4
-	system->cpu.opcode[0x59] = { inst_EOR_AY, 3, 4 , "EOR" };
-
+	system->cpu.opcode[0x59].fkt = inst_EOR_AY;
+	system->cpu.opcode[0x59].len = 3;
+	system->cpu.opcode[0x59].cyles = 4;
 	// EOR (Indirect,Y) 0x51 LEN 2 TIM 2
-	system->cpu.opcode[0x51] = { inst_EOR_IY, 2, 2 , "EOR" };
-
-	// INC (Absolute,X) 0xfe LEN 2 TIM 2
-	system->cpu.opcode[0xfe] = { inst_INC_AX, 3, 7, "INC" };
+	system->cpu.opcode[0x51].fkt = inst_EOR_IY;
+	system->cpu.opcode[0x51].len = 2;
+	system->cpu.opcode[0x51].cyles = 2;
+	// INC (Absolute,X) 0xfe LEN 3 TIM 7
+	system->cpu.opcode[0xfe].fkt = inst_INC_AX;
+	system->cpu.opcode[0xfe].len = 3;
+	system->cpu.opcode[0xfe].cyles = 7;
 	// ROR (Zero Page) 0x66 LEN 2 TIM 5
-	system->cpu.opcode[0x66] = { inst_ROR_Z, 2, 5, "ROR" };
-
-
+	system->cpu.opcode[0x66].fkt = inst_ROR_Z;
+	system->cpu.opcode[0x66].len = 2;
+	system->cpu.opcode[0x66].cyles = 5;
 	// ROR (Zero Page,X) 0x76 LEN 2 TIM 6
-	system->cpu.opcode[0x76] = { inst_ROR_ZX, 2, 6, "ROR" };
-
-	// ROR (Register) 0x6a LEN 1 TIM 5
-	system->cpu.opcode[0x6a] = { inst_ROR_REG, 1, 2, "ROR" };
-
+	system->cpu.opcode[0x76].fkt = inst_ROR_ZX;
+	system->cpu.opcode[0x76].len = 2;
+	system->cpu.opcode[0x76].cyles = 6;
+	// ROR (Register) 0x6a LEN 1 TIM 2
+	system->cpu.opcode[0x6a].fkt = inst_ROR_REG;
+	system->cpu.opcode[0x6a].len = 1;
+	system->cpu.opcode[0x6a].cyles = 2;
 	// ROR (Absolute) 0x6e LEN 3 TIM 6
-	system->cpu.opcode[0x6e] = { inst_ROR_A, 3, 6, "ROR" };
-
+	system->cpu.opcode[0x6e].fkt = inst_ROR_A;
+	system->cpu.opcode[0x6e].len = 3;
+	system->cpu.opcode[0x6e].cyles = 6;
 	// ROR (Absolute,X) 0x7e LEN 3 TIM 7
-	system->cpu.opcode[0x7e] = { inst_ROR_AX, 3, 7, "ROR" };
-
-	// ROL (Accumulator) 0x2A LEN 1 TIM 2
-	system->cpu.opcode[0x2A] = { inst_ROL, 1, 2, "ROL" };
+	system->cpu.opcode[0x7e].fkt = inst_ROR_AX;
+	system->cpu.opcode[0x7e].len = 3;
+	system->cpu.opcode[0x7e].cyles = 7;
+	// ROL (Accumulator) 0x2a LEN 1 TIM 2
+	system->cpu.opcode[0x2a].fkt = inst_ROL;
+	system->cpu.opcode[0x2a].len = 1;
+	system->cpu.opcode[0x2a].cyles = 2;
 	// ROL (ZerroPage) 0x26 LEN 2 TIM 5
-	system->cpu.opcode[0x26] = { inst_ROL_Z, 2, 5, "ROL" };
-	
-
-	// ROL (ZerroPage,X) 0x36 LEN 2 TIM 6
-	system->cpu.opcode[0x36] = { inst_ROL_ZX, 2, 6, "ROL" };
-
-
+	system->cpu.opcode[0x26].fkt = inst_ROL_Z;
+	system->cpu.opcode[0x26].len = 2;
+	system->cpu.opcode[0x26].cyles = 5;
+	// ROL (ZerroPage,X) 0x36 LEN 2 TIM 5
+	system->cpu.opcode[0x36].fkt = inst_ROL_ZX;
+	system->cpu.opcode[0x36].len = 2;
+	system->cpu.opcode[0x36].cyles = 6;
 	// ROL (Absolute) 0x2e LEN 3 TIM 6
-	system->cpu.opcode[0x2e] = { inst_ROL_A, 3, 6, "ROL" };
-	
+	system->cpu.opcode[0x2e].fkt = inst_ROL_A;
+	system->cpu.opcode[0x2e].len = 3;
+	system->cpu.opcode[0x2e].cyles = 6;
 	// ROL (Absolute,X) 0x3e LEN 3 TIM 7
-	system->cpu.opcode[0x3e] = { inst_ROL_AX, 3, 7, "ROL" };
-
+	system->cpu.opcode[0x3e].fkt = inst_ROL_AX;
+	system->cpu.opcode[0x3e].len = 3;
+	system->cpu.opcode[0x3e].cyles = 7;
 	// NOP (Implied) 0xea LEN 1 TIM 2
-	system->cpu.opcode[0xea] = { inst_NOP, 1, 2 , "NOP" };
-	// LDA  (Absolute) 0xAD LEN 3 TIM 4
-	system->cpu.opcode[0xAD] = { inst_LDA_A, 3, 4, "LDA" };
-	// CMP  (Indirect,Y) 0xD1 LEN 2 TIM 5
-	system->cpu.opcode[0xD1] = { inst_CMP_IY, 2, 5 , "CMP" };
-	
-	
-	// CMP  (Indirect,X) 0xc1 LEN 2 TIM 5
-	system->cpu.opcode[0xc1] = { inst_CMP_IX, 2, 6 , "CMP" };
-
-	
+	system->cpu.opcode[0xea].fkt = inst_NOP;
+	system->cpu.opcode[0xea].len = 1;
+	system->cpu.opcode[0xea].cyles = 2;
+	// LDA  (Absolute) 0xad LEN 3 TIM 4
+	system->cpu.opcode[0xad].fkt = inst_LDA_A;
+	system->cpu.opcode[0xad].len = 3;
+	system->cpu.opcode[0xad].cyles = 4;
+	// CMP  (Indirect,Y) 0xd1 LEN 2 TIM 5
+	system->cpu.opcode[0xd1].fkt = inst_CMP_IY;
+	system->cpu.opcode[0xd1].len = 2;
+	system->cpu.opcode[0xd1].cyles = 5;
+	// CMP  (Indirect,X) 0xc1 LEN 2 TIM 6
+	system->cpu.opcode[0xc1].fkt = inst_CMP_IX;
+	system->cpu.opcode[0xc1].len = 2;
+	system->cpu.opcode[0xc1].cyles = 6;
 	// PHA  (PusH Accumulator) 0x48 LEN 1 TIM 3
-	system->cpu.opcode[0x48] = { inst_PHA, 1, 3 , "PHA" };
+	system->cpu.opcode[0x48].fkt = inst_PHA;
+	system->cpu.opcode[0x48].len = 1;
+	system->cpu.opcode[0x48].cyles = 3;
 	// PLA  (PuLL Accumulator) 0x68 LEN 1 TIM 4
-	system->cpu.opcode[0x68] = { inst_PLA, 1, 4 , "PLA" };
-	// PLP  (PuLL Processor status) 0x68 LEN 1 TIM 4
-	system->cpu.opcode[0x28] = { inst_PLP, 1, 4 , "PLP" };
+	system->cpu.opcode[0x68].fkt = inst_PLA;
+	system->cpu.opcode[0x68].len = 1;
+	system->cpu.opcode[0x68].cyles = 4;
+	// PLP  (PuLL Processor status) 0x28 LEN 1 TIM 4
+	system->cpu.opcode[0x28].fkt = inst_PLP;
+	system->cpu.opcode[0x28].len = 1;
+	system->cpu.opcode[0x28].cyles = 4;
 	// PHP  (PusH Processor status) 0x08 LEN 1 TIM 3
-	system->cpu.opcode[0x08] = { inst_PHP, 1, 3 , "PHP" };
+	system->cpu.opcode[0x08].fkt = inst_PHP;
+	system->cpu.opcode[0x08].len = 1;
+	system->cpu.opcode[0x08].cyles = 3;
 	// SBC (Zero Page, X) 0xf5 LEN 2 TIM 4
-	system->cpu.opcode[0xf5] = { inst_SBC_ZX, 2, 4, "SBC" };
-	// LDY (Absolute,X) 0xbc 3 4+
-	system->cpu.opcode[0xbc] = { inst_LDY_AX, 3, 4, "LDY" };
-	// ORA (Indirect,X) 0x01 2 6
-	system->cpu.opcode[0x01] = { inst_ORA_IX, 2, 6, "ORA" };
-	// ORA (Indirect,Y) 0x11 2 5
-	system->cpu.opcode[0x11] = { inst_ORA_IY, 2, 5, "ORA" };
-	// BVC (Branch on oVerflow Clear) 0x50 2 2
-	system->cpu.opcode[0x50] = { inst_BVC, 2, 2 , "BVC" };
-	// BVS (Branch on oVerflow Set) 0x70 2 2
-	system->cpu.opcode[0x70] = { inst_BVS, 2, 2 , "BVS" };
-	// CPX (Zero Page) $E4  2   3
-	system->cpu.opcode[0xe4] = { inst_CPX_Z, 2, 3 , "CPX" };
-	// CMP (Zero Page,X) $d5  2   4
-	system->cpu.opcode[0xd5] = { inst_CMP_ZX, 2, 4 , "CPX" };
-
-	// CPX (Absolute) $EC  3   4
-	system->cpu.opcode[0xec] = { inst_CPX_A, 3, 4 , "CPX" };
-	// BIT (Absolute) $2c  3   4
-	system->cpu.opcode[0x2c] = { inst_BIT_A, 3, 4 , "BIT" };
-
-	// BIT (Zerropage) $24  2   3
-	system->cpu.opcode[0x24] = { inst_BIT_Z, 2, 3 , "BIT" };
-
-
-	// SEI $78  1   2
-	system->cpu.opcode[0x78] = { inst_SEI, 1, 2, "SEI" };
-	// CLI $58  1   2
-	system->cpu.opcode[0x58] = { inst_CLI, 1, 2, "CLI" };
-	// CLD $D8  1   2
-	system->cpu.opcode[0xd8] = { inst_CLD, 1, 2, "CLD" };
-	// CLV $B8  1   2
-	system->cpu.opcode[0xb8] = { inst_CLV, 1, 2, "CLV" };
-	// SED  $D8  1   2
-	system->cpu.opcode[0xF8] = { inst_SED, 1, 2, "SED" };
-	// TXS $9A  1   2
-	system->cpu.opcode[0x9A] = { inst_TXS, 1, 2, "TXS" };
-	// TSX $BA  1   2
-	system->cpu.opcode[0xba] = { inst_TSX, 1, 2, "TSX" };
-	// INC-SBC $ff  3   2
-	system->cpu.opcode[0xff] = { inst_INC_SBC_A, 1, 2, "INC_SBC" };
-	// RTI (Implied) 1 6
-	system->cpu.opcode[0x40] = { inst_RTI, 1, 6, "RTI" };
-
-#if 0
-	FILE* pRomFile;
-	errno_t err;
-
-	err = fopen_s(&pRomFile, "D:\\Programmierung\\C64 - SID\\asm\\6502_functional_test.bin", "rb");
-
-	if (err == 0)
-		printf("The file 'crt_fopen_s.c' was opened\n");
-
-	fseek(pRomFile, 0, SEEK_END);
-	int size = ftell(pRomFile);
-	fseek(pRomFile, 0, SEEK_SET);
-
-	fread(&system->bus.mem[0x400], size, 1, pRomFile);
-
-	fclose(pRomFile);
-#endif
-
-#if 1
-	FILE* pRomFile;
-	errno_t err;
-
-	err = fopen_s(&pRomFile, "D:\\Programmierung\\C64 - SID\\asm\\Celestial_Fantasia.prg", "rb");
-	
-	if (err == 0)
-		printf("The file 'crt_fopen_s.c' was opened\n");
-
-	fseek(pRomFile, 0, SEEK_END);
-	int size = ftell(pRomFile);
-	fseek(pRomFile, 2, SEEK_SET);
-
-	fread(&system->bus.mem[rom_start], size-2, 1, pRomFile);
-	
-	fclose(pRomFile);
-
-	err = fopen_s(&pRomFile, "D:\\Programmierung\\C64 - SID\\asm\\tiny.o", "rb");
-
-	if (err == 0)
-		printf("The file 'crt_fopen_s.c' was opened\n");
-
-	fseek(pRomFile, 0, SEEK_END);
-	 size = ftell(pRomFile);
-	fseek(pRomFile, 0, SEEK_SET);
-
-	fread(&system->bus.mem[0x0F00], size, 1, pRomFile);
-	
-	fclose(pRomFile);
-#endif
+	system->cpu.opcode[0xf5].fkt = inst_SBC_ZX;
+	system->cpu.opcode[0xf5].len = 2;
+	system->cpu.opcode[0xf5].cyles = 4;
+	// LDY (Absolute,X) 0xbc LEN 3 TIM 4
+	system->cpu.opcode[0xbc].fkt = inst_LDY_AX;
+	system->cpu.opcode[0xbc].len = 3;
+	system->cpu.opcode[0xbc].cyles = 4;
+	// ORA (Indirect,X) 0x01 LEN 2 TIM 6
+	system->cpu.opcode[0x01].fkt = inst_ORA_IX;
+	system->cpu.opcode[0x01].len = 2;
+	system->cpu.opcode[0x01].cyles = 6;
+	// ORA (Indirect,Y) 0x11 LEN 2 TIM 5
+	system->cpu.opcode[0x11].fkt = inst_ORA_IY;
+	system->cpu.opcode[0x11].len = 2;
+	system->cpu.opcode[0x11].cyles = 5;
+	// BVC (Branch on oVerflow Clear) 0x50 LEN 2 TIM 2
+	system->cpu.opcode[0x50].fkt = inst_BVC;
+	system->cpu.opcode[0x50].len = 2;
+	system->cpu.opcode[0x50].cyles = 2;
+	// BVS (Branch on oVerflow Set) 0x70 LEN 2 TIM 2
+	system->cpu.opcode[0x70].fkt = inst_BVS;
+	system->cpu.opcode[0x70].len = 2;
+	system->cpu.opcode[0x70].cyles = 2;
+	// CPX (Zero Page) 0xe4  LEN 2 TIM 3
+	system->cpu.opcode[0xe4].fkt = inst_CPX_Z;
+	system->cpu.opcode[0xe4].len = 2;
+	system->cpu.opcode[0xe4].cyles = 3;
+	// CMP (Zero Page,X) 0xd5 LEN 2 TIM 4
+	system->cpu.opcode[0xd5].fkt = inst_CMP_ZX;
+	system->cpu.opcode[0xd5].len = 2;
+	system->cpu.opcode[0xd5].cyles = 4;
+	// CPX (Absolute) 0xec LEN 3 TIM 4
+	system->cpu.opcode[0xec].fkt = inst_CPX_A;
+	system->cpu.opcode[0xec].len = 3;
+	system->cpu.opcode[0xec].cyles = 4;
+	// BIT (Absolute) 0x2c LEN 3 TIM 4
+	system->cpu.opcode[0x2c].fkt = inst_BIT_A;
+	system->cpu.opcode[0x2c].len = 3;
+	system->cpu.opcode[0x2c].cyles = 4;
+	// BIT (Zerropage) $24 LEN 2 TIM 3
+	system->cpu.opcode[0x24].fkt = inst_BIT_Z;
+	system->cpu.opcode[0x24].len = 2;
+	system->cpu.opcode[0x24].cyles = 3;
+	// SEI 0x78 LEN 1 TIM 2
+	system->cpu.opcode[0x78].fkt = inst_SEI;
+	system->cpu.opcode[0x78].len = 1;
+	system->cpu.opcode[0x78].cyles = 2;
+	// CLI 0x58 LEN 1 TIM 2
+	system->cpu.opcode[0x58].fkt = inst_CLI;
+	system->cpu.opcode[0x58].len = 1;
+	system->cpu.opcode[0x58].cyles = 2;
+	// CLD 0xd8 LEN 1 TIM 2
+	system->cpu.opcode[0xd8].fkt = inst_CLD;
+	system->cpu.opcode[0xd8].len = 1;
+	system->cpu.opcode[0xd8].cyles = 2;
+	// CLV 0xb8 LEN 1 TIM 2
+	system->cpu.opcode[0xb8].fkt = inst_CLV;
+	system->cpu.opcode[0xb8].len = 1;
+	system->cpu.opcode[0xb8].cyles = 2;
+	// SED  0xd8 LEN 1 TIM 2
+	system->cpu.opcode[0xf8].fkt = inst_SED;
+	system->cpu.opcode[0xf8].len = 1;
+	system->cpu.opcode[0xf8].cyles = 2;
+	// TXS 0x9a LEN 1 TIM 2
+	system->cpu.opcode[0x9a].fkt = inst_TXS;
+	system->cpu.opcode[0x9a].len = 1;
+	system->cpu.opcode[0x9a].cyles = 2;
+	// TSX 0xba LEN 1 TIM 2
+	system->cpu.opcode[0xba].fkt = inst_TSX;
+	system->cpu.opcode[0xba].len = 1;
+	system->cpu.opcode[0xba].cyles = 2;
+	// INC-SBC 0xff LEN 3 TIM 2
+	system->cpu.opcode[0xff].fkt = inst_INC_SBC_A;
+	system->cpu.opcode[0xff].len = 1;
+	system->cpu.opcode[0xff].cyles = 2;
+	// RTI (Implied) LEN 1 TIM 6
+	system->cpu.opcode[0x40].fkt = inst_RTI;
+	system->cpu.opcode[0x40].len = 1;
+	system->cpu.opcode[0x40].cyles = 6;
 
 	fkt_count = 0;
 	
@@ -675,33 +821,12 @@ void init_6502_sytem(struct system *system)
 	printf("anzahl OPCODES = %d\n", fkt_count);
 
 	system->cpu.reg.sp = 0xff;
-	//system->cpu.reg.pc.value = 0xc0ff; // SID paperboy
-
-	system->cpu.reg.pc.value = 0x0F00; // SID stormlord
-
-
-	//system->cpu.reg.pc.value = 0x400; // TEST
-	time_t t;
-	srand((unsigned int) time(&t));
-
-
-
-
-
-
-#if 1
-	err = fopen_s(&pRomFile, "D:\\Programmierung\\C64 - SID\\asm\\memory_2.bin", "wb+");
-
-	if (err == 0)
-		printf("The file 'crt_fopen_s.c' was opened\n");
-
-	fwrite(&system->bus.mem[0x00], 0xffff, 1, pRomFile);
-	fclose(pRomFile);
-#endif
+	system->cpu.reg.pc.value = 0x0000;
 }
 
 void tick_6502_system(struct system* system)
 {
+#if 0
 	uint8_t  opByte;
 	uint16_t pc_old;
 	uint32_t i;
@@ -709,9 +834,84 @@ void tick_6502_system(struct system* system)
 	opByte = system->bus.mem[system->cpu.reg.pc.value];
 
 	pc_old = system->cpu.reg.pc.value;
+
 	system->cpu.reg.pc.value = system->cpu.opcode[opByte].fkt(system, &system->bus.mem[system->cpu.reg.pc.value + 1],
 															  system->cpu.opcode[opByte].len, system->cpu.opcode[opByte].cyles);
 	system->cpu.reg.clocks += system->cpu.opcode[opByte].cyles;
+#endif
+
+	uint8_t  opByte;
+	uint16_t pc_old;
+	uint32_t i;
+
+	LARGE_INTEGER StartingTime, EndingTime, ElapsedMicroseconds;
+	LARGE_INTEGER Frequency;
+
+	QueryPerformanceFrequency(&Frequency);
+	QueryPerformanceCounter(&StartingTime);
+
+	opByte = system->bus.mem[system->cpu.reg.pc.value];
+
+	pc_old = system->cpu.reg.pc.value;
+
+	system->cpu.reg.pc.value = system->cpu.opcode[opByte].fkt(system, &system->bus.mem[system->cpu.reg.pc.value + 1],
+	system->cpu.opcode[opByte].len, system->cpu.opcode[opByte].cyles);
+	system->cpu.reg.clocks += system->cpu.opcode[opByte].cyles;
+
+	do
+	{
+		QueryPerformanceCounter(&EndingTime);
+		ElapsedMicroseconds.QuadPart = EndingTime.QuadPart - StartingTime.QuadPart;
+		ElapsedMicroseconds.QuadPart *= 1000000;
+		ElapsedMicroseconds.QuadPart /= Frequency.QuadPart;
+	} while (ElapsedMicroseconds.QuadPart < system->cpu.opcode[opByte].cyles);
+}
+
+void generate_irq_6502_system(struct system* system)
+{
+	uint8_t cpu_status = 0;
+	union word jmpAdr;
+
+	// PC auf dem Stack schreiben
+	system->bus.mem[0x100 + system->cpu.reg.sp] = (system->cpu.reg.pc.value & 0xff00) >> 8;
+	system->cpu.reg.sp--;
+	system->bus.mem[0x100 + system->cpu.reg.sp] = (system->cpu.reg.pc.value & 0xff);
+	system->cpu.reg.sp--;
+
+	// Status auf dem Stack schreiben
+
+	//  N | V |	1 | B |	D | I | Z | C
+	if (system->cpu.reg.flags.negative)
+		cpu_status |= (1 << 7);
+
+	if (system->cpu.reg.flags.overflow)
+		cpu_status |= (1 << 6);
+
+	cpu_status |= (1 << 5); // not_used_flag = 1
+	cpu_status |= (1 << 4); // break = 1
+
+	if (system->cpu.reg.flags.decimal)
+		cpu_status |= (1 << 3);
+
+	if (system->cpu.reg.flags.interrupt)
+		cpu_status |= (1 << 2);
+
+	if (system->cpu.reg.flags.zero)
+		cpu_status |= (1 << 1);
+
+	if (system->cpu.reg.flags.carry)
+		cpu_status |= (1 << 0);
+
+	system->bus.mem[0x100 + system->cpu.reg.sp] = cpu_status;
+	system->cpu.reg.sp--;
+
+	system->cpu.reg.flags.interrupt = 1;
+
+	jmpAdr.s.lo = system->bus.mem[0xfffe];
+	jmpAdr.s.hi = system->bus.mem[0xffff];
+
+	system->cpu.reg.pc.value = jmpAdr.value;
+	system->cpu.reg.clocks += 6;
 }
 
 uint16_t inst_unknown(struct system *system, uint8_t* opPara, uint32_t len, uint32_t cyles)
@@ -777,8 +977,13 @@ uint16_t inst_LDA_IX(struct system* system, uint8_t* opPara, uint32_t len, uint3
 	uint8_t zpAdr;
 	uint16_t addr;
 	zpAdr = (system->cpu.reg.x + opPara[0]);
-	addr = (system->bus.mem[zpAdr + 1] << 8) + (system->bus.mem[zpAdr]);
-	system->cpu.reg.a = system->bus.mem[addr];
+	
+	//addr = (system->bus.mem[zpAdr + 1] << 8) + (system->bus.mem[zpAdr]);
+	
+	addr = (memory_read(system, zpAdr + 1) << 8) + (memory_read(system, zpAdr));
+	system->cpu.reg.a = memory_read(system, addr);
+	//system->cpu.reg.a = system->bus.mem[addr];
+	
 	// affects N,Z Flags
 	update_NZ_Flags(system, system->cpu.reg.a);
 	return system->cpu.reg.pc.value + len;
@@ -789,8 +994,14 @@ uint16_t inst_AND_IX(struct system* system, uint8_t* opPara, uint32_t len, uint3
 	uint8_t zpAdr;
 	uint16_t addr;
 	zpAdr = (system->cpu.reg.x + opPara[0]);
-	addr = (system->bus.mem[zpAdr + 1] << 8) + (system->bus.mem[zpAdr]);
-	system->cpu.reg.a = system->cpu.reg.a & system->bus.mem[addr];
+	
+	//addr = (system->bus.mem[zpAdr + 1] << 8) + (system->bus.mem[zpAdr]);
+	//system->cpu.reg.a = system->cpu.reg.a & system->bus.mem[addr];
+	
+	addr = (memory_read(system, zpAdr + 1) << 8) + (memory_read(system, zpAdr));
+	system->cpu.reg.a = system->cpu.reg.a & memory_read(system, addr);
+
+
 	// affects N,Z Flags
 	update_NZ_Flags(system, system->cpu.reg.a);
 	return system->cpu.reg.pc.value + len;
@@ -1431,12 +1642,6 @@ uint16_t inst_SBC_Z(struct system* system, uint8_t* opPara, uint32_t len, uint32
 	uint8_t add_op2;
 	uint16_t add_result;
 
-	if (system->cpu.reg.pc.value == 0x35f8)
-	{
-
-		int halt = 0;
-	}
-
 	add_op1 = system->cpu.reg.a;
 	add_op2 = (~system->bus.mem[opPara[0]]);
 	add_result = add_op1 + add_op2 + system->cpu.reg.flags.carry;
@@ -1495,7 +1700,7 @@ uint16_t inst_JMP_A(struct system* system, uint8_t* opPara, uint32_t len, uint32
 	union word jmpAdr;
 	jmpAdr.s.lo = opPara[0];
 	jmpAdr.s.hi = opPara[1];
-	// affects no Flags
+
 	return jmpAdr.value;
 }
 
@@ -2472,11 +2677,6 @@ uint16_t inst_PHP(struct system* system, uint8_t* opPara, uint32_t len, uint32_t
 {
 	uint8_t cpu_status = 0;
 	
-	if (system->cpu.reg.pc.value == 0x0e83)
-	{
-		int halt = 0;
-	}
-
 	// in stack schreiben
 	
 	//  N | V |	1 | B |	D | I | Z | C
@@ -2717,39 +2917,148 @@ void update_NZ_Flags(struct system* system, uint8_t value)
 
 void update_V_Flag(struct system* system, uint8_t add_op1 , uint8_t add_op2, uint8_t add_result)
 {
-#if 0
-	if ((add_op1 & 0x80) == (add_op2 & 0x80))
-	{
-		if ((add_result & 0x80) != (add_op1 & 0x80))
-			system->cpu.reg.flags.overflow = 1;
-		else system->cpu.reg.flags.overflow = 0;
-	} else system->cpu.reg.flags.overflow = 0;
-#endif
-
 	// A = Accumulator before the addition
 	// v = the value adding to the accumulator
 	// s = the sum of the addition (A+v+C)
-
 	if ((add_op1 ^ add_result) & (add_op2 ^ add_result) & 0x80)
 		system->cpu.reg.flags.overflow = 1;
-	else
-		system->cpu.reg.flags.overflow = 0;
+	else system->cpu.reg.flags.overflow = 0;
+}
 
+uint8_t memory_read(struct system* system, uint16_t addr)
+{
+ return system->bus.mem[addr];
 }
 
 void memory_write(struct system* system, uint16_t addr, uint8_t value)
 {
-	
 	system->bus.mem[addr] = value;
+	
+#if 0
+	if ((addr >= 0xdc04) && (addr <= 0xdc05))
+	{
+		int test = 0;
+	}
+
+	if ((addr >= 0xdc06) && (addr <= 0xdc07))
+	{
+		int test = 0;
+	}
+
+	if ((addr >= 0xdd00) && (addr <= 0xddff))
+	{
+		int test = 0;
+	}
+
+	if(addr == 0xdc09)
+	{
+		int tod = 9;
+	
+	}
+
+	if (addr == 0xDC0A)
+	{
+		int tod = 7;
+	}
+
+	if (addr == 0xDC0B)
+	{
+		int tod = 8;
+	
+	}
+
+	if (addr == 0xDC0E)
+	{
+		int tod = 8;
+
+	}
+
+
+	if (addr == 0xD011)
+	{
+		int tod = 8;
+
+	}
+
+	if (addr == 0xD012)
+	{
+		int tod = 8;
+
+	}
+
+
+	if (addr == 0x0314)
+	{
+		int tod = 8;
+
+	}
+
+	if (addr == 0x0315)
+	{
+		int tod = 8;
+
+	}
+
+
+
+	if (addr == 0x0310)
+	{
+		int tod = 8;
+
+	}
+
+	if (addr == 0x0312)
+	{
+		int tod = 8;
+
+	}
+
+
+	if (addr == 0x0318)
+	{
+		int tod = 8;
+
+	}
+
+	if (addr == 0x0319)
+	{
+		int tod = 8;
+
+	}
+
+	if (addr == 0xd01a)
+	{
+		int tod = 8;
+
+	}
+	
+	if (addr == 0xfffe)
+	{
+		int tod = 8;
+
+	}
+
+	if (addr == 0xffff)
+	{
+		int tod = 8;
+
+	}
+#endif
 
 #if 0
-	//if(addr == 0xd020)
-	// write_emu_u8(s, addr, value);
-#endif
+	
 
-#if 1
-	if ((addr >= 0xd400) && (addr <= 0xd7ff))
-		write_emu_u8(s, addr, value);
-	//else printf("write = %04X:%d\n", addr, value);
+	
+	
+
+	if (addr == 0xDC0B)
+	{
+		int tod;
+		return;
+	}
 #endif
+//	printf("%04X = %d\n", addr, value);
+
+	if ((addr >= 0xd400) && (addr <= 0xd7ff))
+		write_emu_u8(s, addr & 0x1f, value);
 }

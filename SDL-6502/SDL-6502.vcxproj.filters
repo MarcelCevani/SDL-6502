@@ -21,10 +21,16 @@
     <ClCompile Include="core_6502.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
+    <ClCompile Include="sid_player.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core_6502.h">
       <Filter>Quelldateien</Filter>
+    </ClInclude>
+    <ClInclude Include="sid_player.h">
+      <Filter>Headerdateien</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

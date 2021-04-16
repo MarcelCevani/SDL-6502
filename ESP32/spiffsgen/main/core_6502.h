@@ -13,6 +13,19 @@ union word
 	} s;
 };
 
+union dword
+{
+	uint32_t value;
+
+	struct
+	{
+		uint8_t b1;
+		uint8_t b2;
+		uint8_t b3;
+		uint8_t b4;
+	} s;
+};
+
 struct reg_flags
 {
 	uint8_t carry;
@@ -34,18 +47,32 @@ struct mos6502_reg
 	union  word	         pc;
 	struct reg_flags  flags;
 	uint32_t		 clocks;
-	uint32_t  sendBytes;
+	uint32_t         sendBytes;
+	uint32_t         start_time;
+	uint32_t		 anz_PlayJSR;
+	uint8_t		 opcode_long;
+	
+		uint32_t		 max_cyles;
+	uint32_t         extra_cyle;
 };
 
 struct system;
 
-typedef uint16_t (*opFkt)(struct system *system, uint8_t *opPara, uint32_t len, uint32_t cyles);
+typedef uint16_t (*opFkt)(struct system *system, uint8_t *opPara, uint32_t len);
 
 struct opcodes
 {
 	opFkt     fkt;
 	uint32_t  len;
 	uint32_t  cyles;
+};
+
+struct cia2
+{
+	int32_t timerA_latch;
+	int32_t timerA_count;
+	int32_t timerB_latch;
+	int32_t timerB_count;
 };
 
 struct mos6502
@@ -57,16 +84,16 @@ struct mos6502
 struct memorymap
 {
 	uint8_t mem[65536];
-	uint8_t sendBuf[1024];
-
 };
 
 struct system
 {
 	struct mos6502   cpu;
 	struct memorymap bus;
+	struct cia2      cia2;
 };
 
 void init_6502_sytem(struct system *system);
-void tick_6502_system(struct system* system);
-
+uint32_t tick_6502_system(struct system* system);
+void generate_irq_6502_system(struct system* system);
+void generate_mni_6502_system(struct system* system);

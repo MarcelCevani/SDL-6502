@@ -1,4 +1,4 @@
-idf_component_register(SRCS "core_6502.c" "spiffsgen_example_main.c"
+idf_component_register(SRCS "sid_player.c" "core_6502.c" "spiffsgen_example_main.c"
                     INCLUDE_DIRS ".")
 
 # Create a SPIFFS image from the contents of the 'spiffs_image' directory

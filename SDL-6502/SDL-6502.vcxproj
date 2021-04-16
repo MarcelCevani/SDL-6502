@@ -150,9 +150,11 @@
   <ItemGroup>
     <ClCompile Include="core_6502.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="sid_player.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="core_6502.h" />
+    <ClInclude Include="sid_player.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

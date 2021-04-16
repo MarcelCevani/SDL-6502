@@ -1,12 +1,3 @@
-/* SPIFFS Image Generation on Build Example
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
-
 #include <string.h>
 #include "driver/gpio.h"
 #include "driver/ledc.h"
@@ -26,16 +17,25 @@
 #include "esp_log.h"
 #include "esp_spiffs.h"
 #include "mbedtls/md5.h"
-#include "core_6502.h"
+#include "sid_player.h"
 #include <lwip/sockets.h>
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
+#include "esp_task_wdt.h"
+
+#define ZST_PLAYER_NO_SONG       0
+#define ZST_PLAYER_CHECK_CMD     1
+#define ZST_PLAYER_LOAD_TUNE     2
+#define ZST_PLAYER_PLAY_TUNE     3
 
 static const char *TAG = "SIDBOY";
 
 #define LOW_BYTE(x)     ((unsigned char)((x)&0xFF))
 #define HIGH_BYTE(x)    ((unsigned char)(((x)>>8)&0xFF))
 
-struct system system_6502;
+volatile uint32_t player_state = ZST_PLAYER_NO_SONG;
 
+//static void periodic_timer_callback(void* arg);
 
 /* WiFi station Example
 
@@ -67,7 +67,13 @@ static EventGroupHandle_t s_wifi_event_group;
 
 static int s_retry_num = 0;
 static int flag_wifi_connected = 0;
-int s;
+int player_socket;
+
+struct sid_player player;
+//struct sid_player *player;
+
+TaskHandle_t  Core0TaskHandle;  
+TaskHandle_t  Core1TaskHandle; 
 
 static void event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -182,63 +188,336 @@ void app_main(void)
 
 #define LEDC_0_PIN 23 // CLOCK 6581
 
-void app_main(void)
-{
-    ESP_LOGI(TAG, "Initializing SPIFFS");
-    esp_err_t ret;
-    
-   // struct sockaddr_in server;
+uint8_t *sid_memory;
 
+/* Core 0: WIFI;Menü;Ladelogik; Dateisystem Core */
+void CoreTask0(void * parameter) 
+{ 
+    esp_err_t ret;
+    esp_vfs_spiffs_conf_t conf;
+    size_t total = 0, used = 0;
+    u_long bytes_available;
+	uint8_t cmd_buffer[5];
+
+#if 0
+    ESP_LOGI(TAG, "Initializing SPIFFS");
 
     //Initialize NVS
     ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
+    
+    if(ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) 
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
     }
 
-    esp_vfs_spiffs_conf_t conf = {
-      .base_path = "/spiffs",
-      .partition_label = NULL,
-      .max_files = 5,
-      .format_if_mount_failed = false
-    };
+    conf.base_path = "/spiffs";
+    conf.partition_label = NULL;
+    conf.max_files = 5;
+    conf.format_if_mount_failed = false;
 
     // Use settings defined above to initialize and mount SPIFFS filesystem.
     // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
     ret = esp_vfs_spiffs_register(&conf);
 
-    if (ret != ESP_OK) {
-        if (ret == ESP_FAIL) {
+    if(ret != ESP_OK) 
+    {
+        if(ret == ESP_FAIL) 
+        {
             ESP_LOGE(TAG, "Failed to mount or format filesystem");
-        } else if (ret == ESP_ERR_NOT_FOUND) {
+        } else if (ret == ESP_ERR_NOT_FOUND) 
+        {
             ESP_LOGE(TAG, "Failed to find SPIFFS partition");
-        } else {
+        } else 
+        {
             ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
         }
+
         return;
     }
 
-    size_t total = 0, used = 0;
     ret = esp_spiffs_info(NULL, &total, &used);
-    if (ret != ESP_OK) {
+
+    if(ret != ESP_OK) 
+    {
         ESP_LOGE(TAG, "Failed to get SPIFFS partition information (%s)", esp_err_to_name(ret));
-    } else {
+    } 
+    else 
+    {
         ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
     }
+#endif
+    wifi_init_sta();
+
+    while(!flag_wifi_connected)
+        usleep(1000 * 20);
+    
+    printf("Bin verbunden!\n");
+
+    int addr_family = AF_INET;
+    int ip_protocol = 0;
+    struct sockaddr_in dest_addr;
+    struct sockaddr_in *dest_addr_ip4 = (struct sockaddr_in *)&dest_addr;
+    dest_addr_ip4->sin_addr.s_addr = htonl(INADDR_ANY);
+    dest_addr_ip4->sin_family = AF_INET;
+    dest_addr_ip4->sin_port = htons(6581);
+    ip_protocol = IPPROTO_IP;
+    //Create a socket
+    int listen_sock = socket(addr_family, SOCK_STREAM, ip_protocol);
+    if (listen_sock < 0) {
+            ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+            vTaskDelete(NULL);
+            return;
+    }
+    int opt = 1;
+    setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    ESP_LOGI(TAG, "Socket created");
+    //Bind the socket to an address
+    int err = bind(listen_sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+    if (err != 0) {
+            ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
+            //   goto CLEAN_UP;
+    }
+    ESP_LOGI(TAG, "Socket bound, port %d", 6581);
+    //Listen for connections
+    err = listen(listen_sock, 1);
+    if (err != 0) {
+            ESP_LOGE(TAG, "Error occurred during listen: errno %d", errno);
+            // goto CLEAN_UP;
+    }
+    ESP_LOGI(TAG, "Socket listening");
+    struct sockaddr_in source_addr;
+    uint addr_len = sizeof(source_addr);
+    //Accept a connection, This call typically blocks until a client connects with the server.
+    player_socket = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
+    if (player_socket < 0) {
+            ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
+            return;
+    }
+
+    sid_memory = (uint8_t*) malloc(65536);
+ 
+    init_sid_player(&player);
+
+    player_state = ZST_PLAYER_NO_SONG;
+   
+    int t_sekunden = 0;
+
+    do
+    {
+        switch(player_state)
+        {
+            case ZST_PLAYER_NO_SONG:
+            {	
+                ioctl(player_socket, FIONREAD, &bytes_available);
+            
+                if(bytes_available >= 5)
+                {
+                    printf("ZST_PLAYER_CHECK_CMD\n");
+                    player_state = ZST_PLAYER_CHECK_CMD;
+                    break;
+                }
+            
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                break;
+            }
+
+            case ZST_PLAYER_CHECK_CMD:
+            {
+                recv(player_socket, (char*) &cmd_buffer[0], 5, 0);
+
+                if(cmd_buffer[0] == 'L')
+                {
+                    player_state = ZST_PLAYER_LOAD_TUNE;
+                    break;
+                }
+
+                break;
+            }
+
+            case ZST_PLAYER_LOAD_TUNE:
+            {
+                union dword filesize;
+
+                filesize.s.b1 = cmd_buffer[1];
+                filesize.s.b2 = cmd_buffer[2];
+                filesize.s.b3 = cmd_buffer[3];
+                filesize.s.b4 = cmd_buffer[4];
+                
+                uint32_t idx = 0;
+                uint32_t read_len;
+                uint32_t bytes_to_read = filesize.value;
+
+                do
+                {
+                    read_len = recv(player_socket, (char*)&sid_memory[idx], filesize.value, 0);
+                    idx += read_len;
+                    bytes_to_read -= read_len;
+                } while(bytes_to_read != 0);
+            
+                printf("LADE LIED!\n");
+                
+                while(player.flag_emulate_frame)
+                      printf("WARTE\n");
+                
+                load_sid_from_memory(&player, filesize.value, sid_memory);
+                init_sid_tune(&player, 0);
+
+                player_state = ZST_PLAYER_PLAY_TUNE;
+                t_sekunden = 0;
+                player.system_6502.cpu.reg.anz_PlayJSR = 0;
+
+                break;
+            }
+
+            case ZST_PLAYER_PLAY_TUNE:
+            {
+                ioctl(player_socket, FIONREAD, &bytes_available);
+
+                if (bytes_available != 0)
+                {
+                    player_state = ZST_PLAYER_CHECK_CMD;
+                    break;
+                }
+                
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                t_sekunden++;
+
+#if 1
+
+#if 0
+                if((player.system_6502.bus.mem[0xdd0d] & (1 << 0)))
+                    printf("DD0D: Interrupt A an\n");
+                else printf("DD0D: Interrupt A aus\n");
+               
+                if((player.system_6502.bus.mem[0xdd0e] & (1 << 0)))
+                    printf("DD0E: Stop Timer A\n");
+                else printf("DD0E: Start Timer A\n");
 
 
-    // GPIO setup
+                 if((player.system_6502.bus.mem[0xdd0e] & (1 << 3)))
+                    printf("DD0E: Timer A One Shoot\n");    
+                else printf("DD0E: Timer A Continues\n"); 
 
-    gpio_pad_select_gpio(22); // D0
-    gpio_pad_select_gpio(23); // CLK
-    gpio_pad_select_gpio(21); // D7
-    gpio_pad_select_gpio(19); // CS
-    gpio_pad_select_gpio(18); // A0
-    gpio_pad_select_gpio(5);  // A1
+                if((player.system_6502.bus.mem[0xdd0e] & (1 << 4)))
+                    printf("DD0E: Timer A Load start value into timer.\n");
+
+                if((player.system_6502.bus.mem[0xdd0e] & (1 << 5)))
+                    printf("DD0E: Timer A Timer counts positive edges on CNT pin.\n");
+                else printf("DD0E: Timer A Timer Timer counts system cycles.\n");
+#endif
+
+                printf("timeA=%d\n", player.system_6502.cia2.timerA_latch);
+
+
+                    printf("DD0F: %d\n", player.system_6502.bus.mem[0xDD0F]);
+
+                  printf("DD0E: %d\n", player.system_6502.bus.mem[0xDD0E]);
+
+                printf("FPS = %d\n", player.system_6502.cpu.reg.anz_PlayJSR / t_sekunden);
+            
+            
+            //	player->system_6502.bus.mem[0xD011] = HIGH_BYTE(scanline) & 0x80;
+            //	player->system_6502.bus.mem[0xD012] = LOW_BYTE(scanline);
+              printf("0xD011: %d\n", player.system_6502.bus.mem[0xD011]);
+                printf("0xD012: %d\n", player.system_6502.bus.mem[0xD012]);
+
+                  printf("0xd01a: %d\n", player.system_6502.bus.mem[0xd01a]);
+
+                    
+
+                  printf("0xdd0d: %d\n", player.system_6502.bus.mem[0xdd0d]);
+
+
+              #endif
+
+                #if 0
+                printf("-------SET-RASTER-LINE----------\n");
+                printf("D011: %d\n", player.system_6502.bus.mem[0xD011]);
+                printf("D012: %d\n", player.system_6502.bus.mem[0xD012]);
+                printf("---------RASTER-LINE--IRQ--------\n");
+              
+                printf("0314: %d\n", player.system_6502.bus.mem[0x0314]);
+                printf("0315: %d\n", player.system_6502.bus.mem[0x0315]);
+
+                printf("---------NMI--IRQ--------\n");
+              
+                printf("0318: %d\n", player.system_6502.bus.mem[0x0318]);
+                printf("0319: %d\n", player.system_6502.bus.mem[0x0319]);
+
+
+                printf("-------CIA1-----------------\n");
+                printf("DC04: %d\n", player.system_6502.bus.mem[0xDC04]);
+                printf("DC05: %d\n", player.system_6502.bus.mem[0xDC05]);
+                printf("DC06: %d\n", player.system_6502.bus.mem[0xDC06]);
+                printf("DC07: %d\n", player.system_6502.bus.mem[0xDC07]);
+                printf("DC0D: %d\n", player.system_6502.bus.mem[0xDC0D]);
+                printf("DC0E: %d\n", player.system_6502.bus.mem[0xDC0E]);
+                printf("DC0F: %d\n", player.system_6502.bus.mem[0xDC0F]);
+              //  #endif
+               
+                printf("-------CIA2-----------------\n");
+                
+                printf("DD04: %d\n", player.system_6502.bus.mem[0xDD04]);
+                printf("DD05: %d\n", player.system_6502.bus.mem[0xDD05]);
+                printf("DD06: %d\n", player.system_6502.bus.mem[0xDD06]);
+                printf("DD07: %d\n", player.system_6502.bus.mem[0xDD07]);
+                printf("DD0D: %d\n", player.system_6502.bus.mem[0xDD0D]);
+                printf("DD0E: %d\n", player.system_6502.bus.mem[0xDD0E]);
+                printf("DD0F: %d\n", player.system_6502.bus.mem[0xDD0F]);
+
+                printf("-------VIC-----------------\n");
+                  printf("D01a: %d\n", player.system_6502.bus.mem[0xD01a]);
+            
+
+                   printf("DD0E: %d\n", player.system_6502.bus.mem[0xDD0e]);
+            
+
+              //  printf("%d, %d\n", player.system_6502.bus.mem[player.system_6502.cpu.reg.pc.value],player.system_6502.cpu.reg.pc.value);
+                
+                  printf("%d\n", (int)player.system_6502.cpu.reg.max_cyles);
+              
+                 //printf("%d\n", player.system_6502.cpu.reg.anz_PlayJSR / t_sekunden);
+              
+                //printf("DC04: %d\n", player.system_6502.bus.mem[0xdc04]);
+                //printf("DC0D: %d\n", player.system_6502.bus.mem[0xdc05]);
+                #endif
+                
+                break;
+            }
+        }
+   } while(1);
+
+    // All done, unmount partition and disable SPIFFS
+    esp_vfs_spiffs_unregister(NULL);
+    ESP_LOGI(TAG, "SPIFFS unmounted");
+}
+
+static portMUX_TYPE my_mutex;
+  
+
+/* Core 1: SID-Emulator */
+IRAM_ATTR void CoreTask1(void * parameter) 
+{ 
+    esp_err_t result;
+    ledc_timer_config_t ledc_timer;
+    ledc_channel_config_t ledc_channel;
+   
+    #if 0
+    uint32_t ccount;
+    RSR(CCOUNT, ccount);
+    #endif
+
+    /* GPIO konfigurieren */
+    gpio_pad_select_gpio(22);  // D0
+    gpio_pad_select_gpio(23);  // CLK
+    gpio_pad_select_gpio(21);  // D7
+    gpio_pad_select_gpio(19);  // CS
+    gpio_pad_select_gpio(18);  // A0
+    gpio_pad_select_gpio(5);   // A1
     gpio_pad_select_gpio(15);  // A2
     gpio_pad_select_gpio(13);  // A3
-    gpio_pad_select_gpio(4);  // A4
+    gpio_pad_select_gpio(4);   // A4
     gpio_pad_select_gpio(14);  // D1
     gpio_pad_select_gpio(27);  // D2
     gpio_pad_select_gpio(26);  // D3
@@ -247,7 +526,6 @@ void app_main(void)
     gpio_pad_select_gpio(32);  // D6
  
     gpio_set_direction(22, GPIO_MODE_OUTPUT); 
-
     gpio_set_direction(23, GPIO_MODE_OUTPUT); 
     gpio_set_direction(21, GPIO_MODE_OUTPUT); 
     gpio_set_direction(19, GPIO_MODE_OUTPUT); 
@@ -264,210 +542,162 @@ void app_main(void)
     gpio_set_direction(33, GPIO_MODE_OUTPUT); 
     gpio_set_direction(32, GPIO_MODE_OUTPUT); 
    
-    ledc_timer_config_t ledc_timer;
-
-  ledc_timer.clk_cfg = LEDC_USE_APB_CLK;
-
-  ledc_timer.speed_mode = LEDC_HIGH_SPEED_MODE;       // timer mode
-  ledc_timer.duty_resolution = LEDC_TIMER_2_BIT;      // resolution of PWM duty
-  ledc_timer.timer_num = LEDC_TIMER_0;                // timer index
-  ledc_timer.freq_hz = 1000000;                       // frequency of PWM signal
-  // Set configuration of timer0 for high speed channels
-  esp_err_t result = ledc_timer_config(&ledc_timer);
-  if (result == ESP_OK)
+    /* 1MHrz Clock erzeugen */
+    ledc_timer.clk_cfg = LEDC_USE_APB_CLK;
+    ledc_timer.speed_mode = LEDC_HIGH_SPEED_MODE;       // timer mode
+    ledc_timer.duty_resolution = LEDC_TIMER_2_BIT;      // resolution of PWM duty
+    ledc_timer.timer_num = LEDC_TIMER_0;                // timer index
+  //  ledc_timer.freq_hz = 1000000;                       // frequency of PWM signal
+    ledc_timer.freq_hz = 985000;                       // frequency of PWM signal PAL
+    
+    // Set configuration of timer0 for high speed channels
+    result = ledc_timer_config(&ledc_timer);
+  
+    if(result == ESP_OK)
         printf("frequency: %d", ledc_get_freq(LEDC_HIGH_SPEED_MODE, LEDC_TIMER_0));
-  ledc_channel_config_t ledc_channel = {
-          .gpio_num   = LEDC_0_PIN,
-          .speed_mode = LEDC_HIGH_SPEED_MODE,
-          .channel    = LEDC_CHANNEL_0,
-          .intr_type  = LEDC_INTR_DISABLE,
-          .timer_sel  = LEDC_TIMER_0,
-           .duty       = 2,
-          //.duty       = 31,
-          .hpoint     = 0
-  };
+  
+    ledc_channel.gpio_num = LEDC_0_PIN;
+    ledc_channel.speed_mode = LEDC_HIGH_SPEED_MODE;
+    ledc_channel.channel = LEDC_CHANNEL_0;
+    ledc_channel.intr_type = LEDC_INTR_DISABLE;
+    ledc_channel.timer_sel = LEDC_TIMER_0;
+    ledc_channel.duty = 2;
+    ledc_channel.hpoint = 0;
 
-   // Set LED Controller with previously prepared configuration
-   ledc_channel_config(&ledc_channel);
-
-
-
-
-
-
-
-
-
-    init_6502_sytem(&system_6502);
-    
-    FILE* pRomFile;
-    pRomFile = fopen("/spiffs/memory.bin", "rb");
-    fread(&system_6502.bus.mem[0x0000], 0xffff, 1, pRomFile);
-    fclose(pRomFile);
-    
-    uint16_t scanline = 0;
-
-
-
-
-     gpio_set_level(22, 1); // RES deaktivieren
+    // Set LED Controller with previously prepared configuration
+    ledc_channel_config(&ledc_channel);
+   
     gpio_set_level(19, 1); // CS
 
+    vTaskSuspendAll();
 
-#if 0
-    wifi_init_sta();
+    portDISABLE_INTERRUPTS();
 
-    while(!flag_wifi_connected)
-    {
-        usleep(1000 * 20);
+ 	uint32_t count_1;
+    uint32_t flag_firstTime = 0;
+
+	asm volatile ( "rsr %0, ccount" : "=a" (count_1));
+	player.system_6502.cpu.reg.start_time = count_1;
+	player.system_6502.cpu.reg.clocks = 0;
+
+    for(;;) 
+    { 
+        if(player_state != ZST_PLAYER_PLAY_TUNE)
+            continue;
+
+        if(!flag_firstTime)
+        {
+            flag_firstTime = 1;
+            asm volatile ( "rsr %0, ccount" : "=a" (count_1));
+            player.system_6502.cpu.reg.start_time = count_1;
+        }
+
+        play_sid_tune(&player);
     }
-
-    printf("Bin verbunden!\n");
-#endif
-
-#if 0
-    //Create a socket
-	if ((s = socket(AF_INET, SOCK_STREAM, IPPROTO_IP)) < 0)
-	{
-		printf("Could not create socket\n");
-        
-        while(1)
-            usleep(1000 * 20);
-
-	}
-
-    printf("Socket created.\n");
-    server.sin_addr.s_addr = inet_addr("192.168.0.217");
-  	server.sin_family = AF_INET;
-	server.sin_port = htons(1234);
-
-	//Connect to remote server
-	int fehler = connect(s, (struct sockaddr*)&server, sizeof(struct sockaddr_in6));
-
-    if (fehler < 0)
-	{
-		printf("Connect fehler = %d\n", errno);
-
-        while(1)
-            usleep(1000 * 20);
-	}
-
-    #endif
-
-
-#if 0    
-        int addr_family = AF_INET;
-        int ip_protocol = 0;
-        struct sockaddr_in dest_addr;
-        struct sockaddr_in *dest_addr_ip4 = (struct sockaddr_in *)&dest_addr;
-        dest_addr_ip4->sin_addr.s_addr = htonl(INADDR_ANY);
-        dest_addr_ip4->sin_family = AF_INET;
-        dest_addr_ip4->sin_port = htons(1234);
-        ip_protocol = IPPROTO_IP;
-        //Create a socket
-        int listen_sock = socket(addr_family, SOCK_STREAM, ip_protocol);
-        if (listen_sock < 0) {
-                ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
-                vTaskDelete(NULL);
-                return;
-        }
-        int opt = 1;
-        setsockopt(listen_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-        ESP_LOGI(TAG, "Socket created");
-        //Bind the socket to an address
-        int err = bind(listen_sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-        if (err != 0) {
-                ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
-             //   goto CLEAN_UP;
-        }
-        ESP_LOGI(TAG, "Socket bound, port %d", 1234);
-        //Listen for connections
-        err = listen(listen_sock, 1);
-        if (err != 0) {
-                ESP_LOGE(TAG, "Error occurred during listen: errno %d", errno);
-               // goto CLEAN_UP;
-        }
-        ESP_LOGI(TAG, "Socket listening");
-        struct sockaddr_in source_addr;
-        uint addr_len = sizeof(source_addr);
-        //Accept a connection, This call typically blocks until a client connects with the server.
-        s = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
-        if (s < 0) {
-                ESP_LOGE(TAG, "Unable to accept connection: errno %d", errno);
-                return;
-        }
-
-
-        int nodelay = 1;
-        setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (void *)&nodelay, sizeof(int));
-
-        printf("Free ram:%d\n", xPortGetFreeHeapSize());
-#endif
-
-#if 0
-        int nodelay = 1;
-        setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (void *)&nodelay, sizeof(int));
-#endif
-
-       // err = fcntl (s, F_SETFL , O_NONBLOCK );
-
-    #if 0
-printf("Initialised.\n");
-
-	//Create a socket
-	if ((s = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET)
-	{
-		printf("Could not create socket : %d", WSAGetLastError());
-	}
-
-	printf("Socket created.\n");
-
-	server.sin_addr.s_addr = inet_addr("127.0.0.1");
-	server.sin_family = AF_INET;
-	server.sin_port = htons(1234);
-
-	//Connect to remote server
-	if (connect(s, (struct sockaddr*)&server, sizeof(server)) < 0)
-	{
-		puts("connect error");
-		return 1;
-	}
-#endif
-
-	gpio_set_level(19, 1); // CS
-    srand(43434);
-
-    printf("Starte wiedergabe\n");
-
-    while(1)
-    {
-        system_6502.cpu.reg.clocks = 0;
-        system_6502.cpu.reg.sendBytes = 0;
-
-        unsigned long currentMillis1 = xTaskGetTickCount();
-        unsigned long test = 0;
-
-		while(system_6502.cpu.reg.clocks < 19656)
-	    {
-	    	tick_6502_system(&system_6502);
-            scanline = system_6502.cpu.reg.clocks / 63;
-		    system_6502.bus.mem[0xD011] = HIGH_BYTE(scanline) & 0x80;
-			system_6502.bus.mem[0xD012] = LOW_BYTE(scanline);
-        }
-      
-        send(s, (const char*)&system_6502.bus.sendBuf[0], system_6502.cpu.reg.sendBytes, 0);
-
-     
-
-         unsigned long currentMillis2 = xTaskGetTickCount();
-
-         //printf("ticks = %lu, %d\n",currentMillis2-currentMillis1,  system_6502.cpu.reg.sendBytes );
-        // usleep(1000 * 16);
-        usleep(1000 * 10);
-    
-    }
-
-    // All done, unmount partition and disable SPIFFS
-    esp_vfs_spiffs_unregister(NULL);
-    ESP_LOGI(TAG, "SPIFFS unmounted");
 }
+
+void app_main(void)
+{ 
+    xTaskCreatePinnedToCore(CoreTask0,"CPU_0",5000,NULL,1,&Core0TaskHandle,0);
+    xTaskCreatePinnedToCore(CoreTask1,"CPU_1",5000,NULL,1,&Core1TaskHandle,1);
+    //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout ...
+}
+
+#if 0
+static void periodic_timer_callback(void* arg)
+{
+    int start;
+    int end;
+
+   portMUX_TYPE myMutex = portMUX_INITIALIZER_UNLOCKED;
+   taskENTER_CRITICAL(&myMutex);
+    
+   start = xthal_get_ccount();
+   uint32_t scanline;
+    //int64_t time_since_boot = esp_timer_get_time();
+   
+     // ESP_LOGI(TAG, "Periodic timer called_1, time since boot: %lld us", time_since_boot);
+
+    if(player_state != ZST_PLAYER_PLAY_TUNE)
+       {
+         taskEXIT_CRITICAL(&myMutex);
+        return;
+        }
+
+     //ESP_LOGI(TAG, "Periodic timer called_2, time since boot: %lld us", time_since_boot);
+
+    scanline = player.system_6502.cpu.reg.clocks / 63;
+	player.system_6502.bus.mem[0xd011] = HIGH_BYTE(scanline) & 0x80;
+	player.system_6502.bus.mem[0xd012] = LOW_BYTE(scanline);
+	tick_6502_system(&player.system_6502);
+
+    if(player.system_6502.cpu.reg.clocks >= 19656)
+        player.system_6502.cpu.reg.clocks = 0;
+
+      end = xthal_get_ccount();
+  
+      ESP_LOGI(TAG, "Periodic timer called_2, time since boot: %d us", (end-start));
+  taskEXIT_CRITICAL(&myMutex);
+ 
+
+    
+     #if 0
+
+uint32_t scanline = 0;
+
+	uint32_t scanline_irq_at = 0;
+	uint8_t flag_irq_generated = 0;
+	do
+	{
+		scanline = player->system_6502.cpu.reg.clocks / 63;
+		player->system_6502.bus.mem[0xD011] = HIGH_BYTE(scanline) & 0x80;
+		player->system_6502.bus.mem[0xD012] = LOW_BYTE(scanline);
+		tick_6502_system(&player->system_6502);
+
+		if ((player->system_6502.bus.mem[0xd01a] & (1 << 0)) != 0)
+		{
+			if (!player->system_6502.cpu.reg.flags.interrupt)
+			{
+				if (!flag_irq_generated)
+				{
+					if (scanline == scanline_irq_at)
+					{
+						generate_irq_6502_system(&player->system_6502);
+						flag_irq_generated = 1;
+					}
+				}
+				else
+				{
+					if (scanline != scanline_irq_at)
+					{
+						flag_irq_generated = 0;
+					}
+				}
+			}
+		}
+	} while (player->system_6502.cpu.reg.clocks < max_cyles);
+     #endif
+
+
+     #if 0
+
+    portMUX_TYPE myMutex = portMUX_INITIALIZER_UNLOCKED;
+	taskENTER_CRITICAL(&myMutex);
+      int start = xthal_get_ccount();
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+      __asm__ __volatile__("nop;"); // Bug workaround (I found this snippet somewhere in this forum)
+        int end = xthal_get_ccount();
+	taskEXIT_CRITICAL(&myMutex);
+
+     #endif
+
+}
+#endif
